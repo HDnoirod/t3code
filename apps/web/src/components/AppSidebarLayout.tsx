@@ -1,3 +1,7 @@
+import { WorkspaceNavigation } from "./WorkspaceNavigation";
+import { ProjectSidebar } from "./workspaceHub/ProjectSidebar";
+import { useLocalStorage } from "../hooks/useLocalStorage";
+import { QuickCaptureHost } from "./workspaceHub/QuickCapture";
 import { useAtomValue } from "@effect/atom-react";
 import * as Schema from "effect/Schema";
 import {
@@ -39,10 +43,8 @@ import {
 } from "../panelAnimations";
 import { BackgroundThreadAnnouncer } from "./BackgroundThreadAnnouncer";
 import { HistorySwipeNavigation } from "./HistorySwipeNavigation";
-import ThreadSidebar from "./Sidebar";
 import { SidebarBrandWidthProbe } from "./sidebar/SidebarChrome";
 import { isAppModalPage } from "./sidebar/mainAppLocation";
-import type { SidebarRouteReveal } from "./sidebar/routeReveal";
 import { useSidebarStageBackdropVariant } from "./SidebarStageBackdrop";
 import {
   clampThreadSidebarWidth,
@@ -413,22 +415,28 @@ export function AppSidebarLayout({
   showSidebar?: boolean;
 }) {
   const sidebarArea = workspaceAreaProps("sidebar", 0, "Threads");
-  const [sidebarRouteReveal] = useState<SidebarRouteReveal>(() => ({
-    observedKey: null,
-    pendingKey: null,
-  }));
   const { active: panelAnimationsActive, durationMs: panelAnimationDurationMs } =
     usePanelAnimationSettings();
   const pathname = useLocation({ select: (location) => location.pathname });
   const panelAnimationsSuppressed = usePanelNavigationSuppression(pathname);
   const routePanelAnimationsActive = panelAnimationsActive && !panelAnimationsSuppressed;
+  const [navigationExpanded, setNavigationExpanded] = useLocalStorage(
+    "t3code:workspace-navigation-expanded",
+    false,
+    Schema.Boolean,
+  );
+  const isOnWorkspaceTool = ["/calendar", "/notes", "/toolbox"].includes(pathname);
   const isMacosDesktop = isElectron && isMacPlatform(navigator.platform);
   const [sidebarWidth, setSidebarWidth] = useState(readInitialThreadSidebarWidth);
   // A clamped drag may not change width, so viewport changes need a separate subscription.
   const viewportWidth = useSyncExternalStore(subscribeToViewportWidth, readViewportWidth);
+  const navigationWidth = navigationExpanded && viewportWidth >= 768 ? 164 : 76;
   const [brandWidth, setBrandWidth] = useState(0);
   const sidebarMinimumWidth = resolveThreadSidebarMinimumWidth(brandWidth);
-  const sidebarMaximumWidth = resolveThreadSidebarMaximumWidth(viewportWidth, sidebarMinimumWidth);
+  const sidebarMaximumWidth = resolveThreadSidebarMaximumWidth(
+    viewportWidth - navigationWidth,
+    sidebarMinimumWidth,
+  );
   const resetSidebarWidth = () => {
     try {
       removeLocalStorageItem(THREAD_SIDEBAR_WIDTH_STORAGE_KEY);
@@ -447,6 +455,7 @@ export function AppSidebarLayout({
       : {}
   ) as CSSProperties;
   const sidebarProviderStyle = {
+    "--app-navigation-width": `${navigationWidth}px`,
     "--sidebar-width": `${clampThreadSidebarWidth(sidebarWidth, sidebarMinimumWidth, sidebarMaximumWidth)}px`,
     "--panel-animation-duration": `${panelAnimationDurationMs}ms`,
     ...windowControlsInsetStyle,
@@ -460,7 +469,12 @@ export function AppSidebarLayout({
         storageKey="chat_thread_sidebar_open"
         style={sidebarProviderStyle}
       >
-        {showSidebar ? (
+        <QuickCaptureHost />
+        <WorkspaceNavigation
+          expanded={navigationWidth > 76}
+          onToggle={() => setNavigationExpanded((value) => !value)}
+        />
+        {showSidebar && !isOnWorkspaceTool ? (
           <>
             <SidebarBrandWidthProbe isElectron={isElectron} onWidthChange={setBrandWidth} />
             <Sidebar
@@ -475,20 +489,21 @@ export function AppSidebarLayout({
                 minWidth: sidebarMinimumWidth,
                 shouldAcceptWidth: ({ currentWidth, nextWidth, wrapper }) =>
                   nextWidth <= currentWidth ||
-                  wrapper.clientWidth - nextWidth >= THREAD_MAIN_CONTENT_MIN_WIDTH,
+                  wrapper.clientWidth - navigationWidth - nextWidth >=
+                    THREAD_MAIN_CONTENT_MIN_WIDTH,
                 storageKey: THREAD_SIDEBAR_WIDTH_STORAGE_KEY,
                 onResize: setSidebarWidth,
               }}
               style={windowControlsInsetStyle}
             >
-              <ThreadSidebar routeReveal={sidebarRouteReveal} />
+              <ProjectSidebar />
               <SidebarRail onDoubleClick={resetSidebarWidth} />
             </Sidebar>
           </>
         ) : null}
         {children}
         <BackgroundThreadAnnouncer />
-        <SidebarControl showSidebar={showSidebar} />
+        <SidebarControl showSidebar={showSidebar && !isOnWorkspaceTool} />
         {isElectron ? <HistorySwipeNavigation /> : null}
       </SidebarProvider>
     </PanelAnimationSuppressionProvider>

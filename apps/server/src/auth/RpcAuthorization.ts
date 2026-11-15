@@ -38,6 +38,14 @@ import type * as RpcGroup from "effect/rpc/RpcGroup";
 type WsRpcMethod = RpcGroup.Rpcs<typeof WsRpcGroup>["_tag"];
 
 export const RPC_REQUIRED_SCOPES = {
+  [WS_METHODS.hubChatDefaults]: AuthOrchestrationReadScope,
+  [WS_METHODS.hubChatContext]: AuthOrchestrationReadScope,
+  [WS_METHODS.hubList]: AuthOrchestrationReadScope,
+  [WS_METHODS.hubGet]: AuthOrchestrationReadScope,
+  [WS_METHODS.hubExport]: AuthOrchestrationReadScope,
+  [WS_METHODS.timeTrackingList]: AuthOrchestrationReadScope,
+  [WS_METHODS.timeTrackingReport]: AuthOrchestrationReadScope,
+
   ...CLIENT_GUARDED_RPC_SCOPES,
   [ORCHESTRATION_V2_WS_METHODS.dispatchCommand]: AuthOrchestrationOperateScope,
   [ORCHESTRATION_V2_WS_METHODS.getWorkflowScript]: AuthOrchestrationReadScope,

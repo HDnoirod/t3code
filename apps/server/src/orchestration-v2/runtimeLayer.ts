@@ -1,3 +1,4 @@
+import { layerProjectContextForTurn } from "../persistence/ProjectFolderContext.ts";
 import * as WorktreeBranchSync from "./WorktreeBranchSync.ts";
 import * as GuestShareService from "../guest/GuestShareService.ts";
 import * as UsageLimitRecoveryWorker from "./UsageLimitRecoveryWorker.ts";
@@ -163,6 +164,7 @@ const layerRunExecutionServiceProvided = RunExecutionService.layer.pipe(
 );
 
 const layerProviderTurnStartServiceProvided = ProviderTurnStartService.layer.pipe(
+  Layer.provide(layerProjectContextForTurn),
   Layer.provide(
     Layer.mergeAll(
       layerContextHandoffServiceProvided,

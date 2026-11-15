@@ -1,3 +1,5 @@
+import { toastManager } from "../components/ui/toast";
+import { readHubChatDefault } from "../lib/hubChatDefaults";
 import {
   scopedProjectKey,
   scopeProjectRef,
@@ -90,7 +92,7 @@ export function createNewThreadHandler(router: AnyRouter) {
     return resolveThreadRouteTarget(currentRouteParams);
   };
 
-  return (
+  return async (
     projectRef: ScopedProjectRef,
     options?: {
       branch?: string | null;
@@ -161,7 +163,22 @@ export function createNewThreadHandler(router: AnyRouter) {
       project?.id ?? null,
       project,
     );
-    const configuredDefaultModelSelection = projectSettings.settings.defaultModelSelection ?? null;
+    let clientDefault = null;
+    if (environmentServerConfigs.get(projectRef.environmentId)?.hubChatDefaults) {
+      try {
+        clientDefault = await readHubChatDefault(projectRef);
+      } catch (cause) {
+        toastManager.add({
+          type: "error",
+          title: "Could not choose the default AI account",
+          description: cause instanceof Error ? cause.message : "Try again.",
+        });
+        return null;
+      }
+      if (abandonedSinceRequest()) return null;
+    }
+    const configuredDefaultModelSelection =
+      clientDefault ?? projectSettings.settings.defaultModelSelection ?? null;
     const fallbackResolution = resolveNewThreadModelSelection({
       defaultSelection:
         configuredDefaultModelSelection ??

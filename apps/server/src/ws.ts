@@ -1,3 +1,8 @@
+import { makeWorkspaceHubContext } from "./persistence/ProjectFolderContext.ts";
+import { makeWorkspaceHubStore } from "./persistence/WorkspaceHub.ts";
+import { makeWorkspaceHubChats } from "./persistence/WorkspaceHubChats.ts";
+import { makeHubChatDefaults } from "./persistence/HubChatDefaults.ts";
+import { makeTimeTrackingStore } from "./persistence/TimeTracking.ts";
 import { OrchestrationDispatchCommandError } from "@t3tools/contracts";
 import * as Context from "effect/Context";
 import * as SecureRandom from "effect/crypto/SecureRandom";
@@ -1403,6 +1408,11 @@ export const layerWsRpc = (
 ) =>
   Layer.effectContext(
     Effect.gen(function* () {
+      const timeTracking = yield* makeTimeTrackingStore;
+      const workspaceHub = yield* makeWorkspaceHubStore;
+      const hubContext = yield* makeWorkspaceHubContext;
+      const createHubChat = yield* makeWorkspaceHubChats;
+      const hubChatDefaults = yield* makeHubChatDefaults;
       const currentSessionId = currentSession.sessionId;
       const sql = yield* SqlClient.SqlClient;
       const threadManagement = yield* ThreadManagementService.ThreadManagementService;
@@ -1979,6 +1989,8 @@ export const layerWsRpc = (
           shellOlderSettled: true,
           threadResumeCompletionMarker: true,
           threadSnapshotPagination: true,
+          hubChatDefaults: true,
+          clientChats: true,
           threadFind: true,
           threadFindProgressive: true,
           secretProviderSettings: true,
@@ -2051,6 +2063,19 @@ export const layerWsRpc = (
       });
 
       const handlers = ServerWsRpcGroup.of({
+        [WS_METHODS.hubChatDefaults]: (input) => hubChatDefaults(input),
+        [WS_METHODS.hubMoveProject]: (input) => workspaceHub.moveProject(input),
+        [WS_METHODS.hubEnsureProject]: (input) => workspaceHub.ensureProject(input),
+        [WS_METHODS.hubCreateChat]: (input) => createHubChat(input),
+        [WS_METHODS.hubChatContext]: (input) => hubContext(input),
+        [WS_METHODS.hubList]: (input) => workspaceHub.list(input),
+        [WS_METHODS.hubGet]: (input) => workspaceHub.get(input),
+        [WS_METHODS.hubSave]: (input) => workspaceHub.save(input),
+        [WS_METHODS.hubExport]: () => workspaceHub.exportData(),
+        [WS_METHODS.timeTrackingList]: (input) => timeTracking.list(input),
+        [WS_METHODS.timeTrackingReport]: (input) => timeTracking.report(input),
+        [WS_METHODS.timeTrackingMutate]: (input) => timeTracking.mutate(input),
+
         [ORCHESTRATION_V2_WS_METHODS.dispatchCommand]: (command) =>
           Effect.annotateCurrentSpan({
             "orchestration_v2.command_id": command.commandId,

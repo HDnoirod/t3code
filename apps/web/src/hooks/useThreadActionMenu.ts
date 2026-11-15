@@ -62,6 +62,7 @@ export function useThreadActionMenu(input: {
   readonly threadRef: ScopedThreadRef | null;
   readonly projectCwd: string | null;
   readonly onStartRename: () => void;
+  readonly onOpenProject?: (() => void) | undefined;
   readonly onFind?: ((threadRef: ScopedThreadRef) => void) | undefined;
   readonly canShareWithGuest: boolean;
 }) {
@@ -197,6 +198,10 @@ export function useThreadActionMenu(input: {
           onFind?.(threadRef);
           return;
         case "project-settings": {
+          if (input.onOpenProject) {
+            input.onOpenProject();
+            return;
+          }
           const project = projects.find(
             (candidate) =>
               candidate.environmentId === thread.environmentId && candidate.id === thread.projectId,

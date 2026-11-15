@@ -1,4 +1,30 @@
 import {
+  HubError,
+  HubEnsureProjectInput,
+  HubMoveProjectInput,
+  HubChatDefaultsInput,
+  HubChatDefaults,
+  HubSummary,
+  HubItem,
+  HubListInput,
+  HubList,
+  HubGetInput,
+  HubSaveInput,
+  HubExport,
+  HubCreateChatInput,
+  HubCreateChatResult,
+  HubChatContextInput,
+  HubChatContext,
+} from "./workspaceHub.ts";
+import {
+  TimeTrackingError,
+  TimeTrackingListInput,
+  TimeTrackingMutation,
+  TimeTrackingSnapshot,
+  TimeTrackingReportInput,
+  TimeTrackingReport,
+} from "./timeTracking.ts";
+import {
   OrchestrationV2SearchThreadError,
   OrchestrationV2SearchThreadInput,
   OrchestrationV2SearchThreadResult,
@@ -413,6 +439,19 @@ import { VcsError } from "./vcs.ts";
 import { Project, ProjectMutation, ProjectMutationError } from "./project.ts";
 
 export const WS_METHODS = {
+  hubList: "hub.list",
+  hubGet: "hub.get",
+  hubSave: "hub.save",
+  hubMoveProject: "hub.moveProject",
+  hubChatDefaults: "hub.chatDefaults",
+  hubEnsureProject: "hub.ensureProject",
+  hubExport: "hub.export",
+  hubCreateChat: "hub.createChat",
+  hubChatContext: "hub.chatContext",
+  timeTrackingList: "timeTracking.list",
+  timeTrackingMutate: "timeTracking.mutate",
+  timeTrackingReport: "timeTracking.report",
+
   projectsListEntries: "projects.listEntries",
   projectsListIgnoredFiles: "projects.listIgnoredFiles",
   projectsReadFile: "projects.readFile",
@@ -2065,6 +2104,66 @@ export class RpcScopeAuthorization extends RpcMiddleware.Service<RpcScopeAuthori
 ) {}
 
 export const WsRpcGroup = RpcGroup.make(
+  Rpc.make(WS_METHODS.hubChatDefaults, {
+    payload: HubChatDefaultsInput,
+    success: HubChatDefaults,
+    error: Schema.Union([HubError, EnvironmentAuthorizationError]),
+  }),
+  Rpc.make(WS_METHODS.hubMoveProject, {
+    payload: HubMoveProjectInput,
+    success: HubSummary,
+    error: Schema.Union([HubError, EnvironmentAuthorizationError]),
+  }),
+  Rpc.make(WS_METHODS.hubEnsureProject, {
+    payload: HubEnsureProjectInput,
+    success: HubItem,
+    error: Schema.Union([HubError, EnvironmentAuthorizationError]),
+  }),
+  Rpc.make(WS_METHODS.hubCreateChat, {
+    payload: HubCreateChatInput,
+    success: HubCreateChatResult,
+    error: Schema.Union([HubError, EnvironmentAuthorizationError]),
+  }),
+  Rpc.make(WS_METHODS.hubChatContext, {
+    payload: HubChatContextInput,
+    success: HubChatContext,
+    error: Schema.Union([HubError, EnvironmentAuthorizationError]),
+  }),
+  Rpc.make(WS_METHODS.hubList, {
+    payload: HubListInput,
+    success: HubList,
+    error: Schema.Union([HubError, EnvironmentAuthorizationError]),
+  }),
+  Rpc.make(WS_METHODS.hubGet, {
+    payload: HubGetInput,
+    success: HubItem,
+    error: Schema.Union([HubError, EnvironmentAuthorizationError]),
+  }),
+  Rpc.make(WS_METHODS.hubSave, {
+    payload: HubSaveInput,
+    success: HubItem,
+    error: Schema.Union([HubError, EnvironmentAuthorizationError]),
+  }),
+  Rpc.make(WS_METHODS.hubExport, {
+    payload: Schema.Struct({}),
+    success: HubExport,
+    error: Schema.Union([HubError, EnvironmentAuthorizationError]),
+  }),
+  Rpc.make(WS_METHODS.timeTrackingReport, {
+    payload: TimeTrackingReportInput,
+    success: TimeTrackingReport,
+    error: Schema.Union([TimeTrackingError, EnvironmentAuthorizationError]),
+  }),
+  Rpc.make(WS_METHODS.timeTrackingList, {
+    payload: TimeTrackingListInput,
+    success: TimeTrackingSnapshot,
+    error: Schema.Union([TimeTrackingError, EnvironmentAuthorizationError]),
+  }),
+  Rpc.make(WS_METHODS.timeTrackingMutate, {
+    payload: TimeTrackingMutation,
+    success: Schema.Void,
+    error: Schema.Union([TimeTrackingError, EnvironmentAuthorizationError]),
+  }),
   WsGuestShareCreateRpc,
   WsServerProbeRpc,
   WsServerGetConfigRpc,

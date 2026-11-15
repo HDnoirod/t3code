@@ -1,3 +1,4 @@
+import { ProjectContextForTurn } from "../persistence/ProjectFolderContext.ts";
 import * as NodeCrypto from "@effect/platform-node/NodeCrypto";
 import * as NodeServices from "@effect/platform-node/NodeServices";
 import { expect, it, vi } from "vite-plus/test";
@@ -1906,3 +1907,20 @@ for (const previousMessages of [[], ["/compact", " /COMPACT "]]) {
       }),
   );
 }
+
+effectIt.effect(
+  "includes marked project context in provider turns, including remote client turns",
+  () =>
+    Effect.gen(function* () {
+      const harness = makeLocalCommandHarness({
+        text: "Continue",
+        sideChat: { contextRun: "delivered" },
+      });
+      const context = vi.fn(() => Effect.succeed("Project brief and selected notes"));
+      yield* harness.start.pipe(Effect.provideService(ProjectContextForTurn, context));
+      expect(context).toHaveBeenCalledOnce();
+      expect(harness.startTurn.mock.calls[0]?.[0].message.text).toContain(
+        "Project brief and selected notes\n\nUser request:\nContinue",
+      );
+    }),
+);

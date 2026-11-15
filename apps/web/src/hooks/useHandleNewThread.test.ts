@@ -251,6 +251,9 @@ vi.mock("../uiStateStore", () => ({
 }));
 vi.mock("./useSettings", () => ({ getClientSettings: () => ({}) }));
 
+vi.mock("../lib/hubChatDefaults", () => ({ readHubChatDefault: vi.fn(async () => null) }));
+vi.mock("../components/ui/toast", () => ({ toastManager: { add: vi.fn() } }));
+
 import { resolveDefaultProjectRef, useNewThreadHandler } from "./useHandleNewThread";
 
 describe.each([

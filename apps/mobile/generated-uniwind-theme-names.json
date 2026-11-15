@@ -8,5 +8,11 @@
   "ember-light",
   "ember-dark",
   "iris-light",
-  "iris-dark"
+  "iris-dark",
+  "cheerful-light",
+  "cheerful-dark",
+  "christmas-light",
+  "christmas-dark",
+  "frost-light",
+  "frost-dark"
 ]

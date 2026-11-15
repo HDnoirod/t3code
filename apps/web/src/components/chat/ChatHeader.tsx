@@ -1,4 +1,9 @@
+import { useOpenProject } from "../workspaceHub/useOpenProject";
+import { scopedThreadKey } from "@t3tools/client-runtime/environment";
+import { useHubProjects } from "../workspaceHub/useHubProjects";
+import { useHubClients } from "../workspaceHub/useHubClients";
 import {
+  clientIdForChatWorkspace,
   AuthOrchestrationOperateScope,
   type EnvironmentId,
   type ScopedThreadRef,
@@ -82,7 +87,25 @@ export const ChatHeader = memo(function ChatHeader({
   onOpenProjectSettings,
   onFindInThread,
 }: ChatHeaderProps) {
-  const activeProjectName = activeProject?.isScratch ? "No project" : activeProject?.title;
+  const { owners } = useHubProjects();
+  const clients = useHubClients();
+  const openProject = useOpenProject();
+  const hubProject = owners.get(
+    scopedThreadKey(scopeThreadRef(activeThreadEnvironmentId, activeThreadId)),
+  );
+  const clientId = activeProject ? clientIdForChatWorkspace(activeProject.id) : null;
+  const client = clients.find(
+    (client) => client.environmentId === activeThreadEnvironmentId && client.id === clientId,
+  );
+  const activeProjectName =
+    hubProject?.title ??
+    client?.name ??
+    (activeProject?.isScratch ? "No project" : activeProject?.title);
+  const openHubProject = hubProject
+    ? () => {
+        void openProject(hubProject);
+      }
+    : undefined;
   const activeProjectCwd = activeProject?.workspaceRoot ?? null;
   const interfaceFont = useClientSettings((settings) => settings.fontFamilySans);
   const breadcrumbContainerRef = useRef<HTMLDivElement>(null);
@@ -200,6 +223,7 @@ export const ChatHeader = memo(function ChatHeader({
     threadRef: isServerThread ? activeThreadRef : null,
     projectCwd: activeProjectCwd,
     onStartRename: startRename,
+    onOpenProject: openHubProject,
     onFind: onFindInThread,
     canShareWithGuest,
   });

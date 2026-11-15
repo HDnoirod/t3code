@@ -1,3 +1,8 @@
+import { runAtomCommand, squashAtomCommandFailure } from "@t3tools/client-runtime/state/runtime";
+import { newThreadId } from "../lib/utils";
+import { hubCreateChatCommand } from "../state/workspaceHub";
+import { environmentServerConfigsAtom } from "../state/server";
+import { waitForThreadShell } from "../state/entities";
 import { AuthPreviewOperateScope, type EnvironmentId } from "@t3tools/contracts";
 import type { AnyRouter } from "@tanstack/react-router";
 
@@ -102,6 +107,46 @@ export function installChatRouteCommands(router: AnyRouter): () => void {
     event.stopPropagation();
   };
 
+  const pendingFreeChats = new Map<EnvironmentId, ReturnType<typeof newThreadId>>();
+  const creatingFreeChats = new Set<EnvironmentId>();
+  const startFreeChat = async (environmentId: EnvironmentId) => {
+    if (!appAtomRegistry.get(environmentServerConfigsAtom).get(environmentId)?.clientChats) {
+      await scratch.startScratchThread(environmentId);
+      return;
+    }
+    if (creatingFreeChats.has(environmentId)) return;
+    creatingFreeChats.add(environmentId);
+    const threadId = pendingFreeChats.get(environmentId) ?? newThreadId();
+    pendingFreeChats.set(environmentId, threadId);
+    try {
+      const result = await runAtomCommand(
+        appAtomRegistry,
+        hubCreateChatCommand,
+        {
+          environmentId,
+          input: { projectId: null, threadId },
+        },
+        { reportFailure: false },
+      );
+      if (result._tag !== "Success") throw squashAtomCommandFailure(result);
+      if (!(await waitForThreadShell({ environmentId, threadId })))
+        throw new Error("The chat was created but has not synced yet. Try again to reopen it.");
+      pendingFreeChats.delete(environmentId);
+      await router.navigate({
+        to: "/$environmentId/$threadId",
+        params: { environmentId, threadId },
+      });
+    } catch (cause) {
+      toastManager.add({
+        type: "error",
+        title: "Could not create chat",
+        description: cause instanceof Error ? cause.message : "Try again.",
+      });
+    } finally {
+      creatingFreeChats.delete(environmentId);
+    }
+  };
+
   const startNewLocal: CommandHandler = (event) => {
     claim(event);
     // With no current or open project, such as when every project is archived, pick one.
@@ -128,7 +173,7 @@ export function installChatRouteCommands(router: AnyRouter): () => void {
         );
         if (environmentId === null) return;
         claim(event);
-        void scratch.startScratchThread(environmentId);
+        void startFreeChat(environmentId);
       },
       "chat.new": (event) => {
         const groups = readProjectGroups();

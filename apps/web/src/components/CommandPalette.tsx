@@ -1,3 +1,6 @@
+import { useHubClients } from "./workspaceHub/useHubClients";
+import { useHubProjects } from "./workspaceHub/useHubProjects";
+import { useOpenProject } from "./workspaceHub/useOpenProject";
 import { ThreadContextDragGhost } from "./chat/ThreadContextDragGhost";
 import { threadPullRequestLinkMode } from "@t3tools/client-runtime/thread-pull-request-compatibility";
 import { visibleThreadPullRequests } from "@t3tools/shared/threadPullRequests";
@@ -95,7 +98,7 @@ import { useAtomValue } from "@effect/atom-react";
 
 import { isDesktopLocalConnectionTarget } from "../connection/desktopLocal";
 import { useDesktopLocalBootstraps } from "../connection/useDesktopLocalBootstraps";
-import { useHandleNewThread } from "../hooks/useHandleNewThread";
+import { useProjectChatHandler } from "../hooks/useProjectChatHandler";
 import { useOpenPanelPullRequestUrl } from "../hooks/useOpenPanelPullRequestUrl";
 import { copyThreadReference } from "../lib/copyThreadReference";
 import {
@@ -404,6 +407,9 @@ function OpenCommandPaletteDialog(props: {
   readonly initialContext: CommandPaletteReturnContext | undefined;
 }) {
   const navigate = useNavigate();
+  const openProject = useOpenProject();
+  const projectClients = useHubClients();
+  const { projects: navigationProjects } = useHubProjects();
   const pathname = useLocation({ select: (location) => location.pathname });
   const { openChildSearch, setOpen } = props;
   // Keyed by palette session: the intent and restored search only seed this
@@ -470,8 +476,17 @@ function OpenCommandPaletteDialog(props: {
   const desktopLocalBootstraps = useDesktopLocalBootstraps();
   const primaryEnvironmentId = usePrimaryEnvironmentId();
   const availableSettingsSearchItems = useAvailableSettingsSearchItems();
-  const { activeDraftThread, activeThread, defaultProjectRef, handleNewThread } =
-    useHandleNewThread();
+  const {
+    activeDraftThread,
+    activeThread,
+    defaultProjectRef,
+    handleNewThread,
+    activeHubProject,
+    handleProjectChat,
+    handleFreeChat,
+    handleClientChat,
+    activeClientId,
+  } = useProjectChatHandler();
   const paletteRouteTarget = useThreadRouteTarget();
   const projects = useProjects();
   const referenceThreadRef =
@@ -889,14 +904,50 @@ function OpenCommandPaletteDialog(props: {
     true,
   );
   // Jump shortcuts follow the rows as shown, so a pin cannot move a number to another row.
-  const projectJumpItems = new Map(
-    enumerateCommandPaletteItems(
-      openingOrderThreadItems.filter((item) => item.value !== NEW_THREAD_NO_PROJECT_VALUE),
-    ).map((item) => [item.value, item] as const),
-  );
-  const projectThreadItems = openingOrderThreadItems.map(
-    (item) => projectJumpItems.get(item.value) ?? item,
-  );
+  const projectThreadItems =
+    navigationProjects.length === 0 && projectClients.length === 0
+      ? openingOrderThreadItems
+      : enumerateCommandPaletteItems([
+          ...projectClients
+            .filter((client) => !client.archived)
+            .map((client): CommandPaletteActionItem => ({
+              kind: "action",
+              value: `new-client-chat:${client.environmentId}:${client.id}`,
+              title: client.name,
+              description: "General client chat",
+              searchTerms: [client.name, "client", "new chat"],
+              icon: <MessageSquareIcon className={ITEM_ICON_CLASS} />,
+              run: async () => {
+                await handleClientChat(client.environmentId, client.id);
+              },
+            })),
+          ...navigationProjects.map((project): CommandPaletteActionItem => ({
+            kind: "action",
+            value: `new-thread-in:${project.environmentId}:${project.id}`,
+            title: project.title,
+            description:
+              projectClients.find(
+                (client) =>
+                  client.environmentId === project.environmentId &&
+                  client.id === project.clientIds[0],
+              )?.name ?? "Personal project",
+            searchTerms: [
+              project.title,
+              "new chat",
+              ...projectClients
+                .filter(
+                  (client) =>
+                    client.environmentId === project.environmentId &&
+                    project.clientIds.includes(client.id),
+                )
+                .map((client) => client.name),
+            ],
+            icon: <FolderIcon className={ITEM_ICON_CLASS} />,
+            run: async () => {
+              await handleProjectChat(project);
+            },
+          })),
+        ]);
 
   const {
     threadItems: allThreadItems,
@@ -1263,9 +1314,37 @@ function OpenCommandPaletteDialog(props: {
   };
 
   const actionItems: Array<CommandPaletteActionItem | CommandPaletteSubmenuItem> = [];
+  const freeChatEnvironmentId =
+    activeThread?.environmentId ?? primaryEnvironmentId ?? environments[0]?.environmentId;
+  if (freeChatEnvironmentId)
+    actionItems.push({
+      kind: "action",
+      value: "action:new-free-chat",
+      title: "New free chat",
+      searchTerms: ["free", "chat", "unassigned", "outside project"],
+      icon: <MessageSquareIcon className={ITEM_ICON_CLASS} />,
+      run: async () => {
+        await handleFreeChat(freeChatEnvironmentId);
+      },
+    });
+  actionItems.push({
+    kind: "action",
+    value: "action:new-hub-project",
+    searchTerms: ["new project", "client", "notes", "working folder"],
+    title: "New project",
+    icon: <FolderPlusIcon className={ITEM_ICON_CLASS} />,
+    run: async () => {
+      await navigate({ to: "/hub", search: { create: true } });
+    },
+  });
 
-  if (projects.length > 0) {
+  if (navigationProjects.length > 0 || projectClients.some((client) => !client.archived)) {
     const activeProjectTitle =
+      projectClients.find(
+        (client) =>
+          client.id === activeClientId && client.environmentId === activeThread?.environmentId,
+      )?.name ??
+      activeHubProject?.title ??
       projectPickerEntries.find((entry) => entry.isPreferred)?.group.displayName ??
       currentProject?.title ??
       null;
@@ -1277,7 +1356,7 @@ function OpenCommandPaletteDialog(props: {
         searchTerms: ["new thread", "chat", "create", "draft"],
         title: (
           <>
-            New thread in <span className="font-semibold">{activeProjectTitle}</span>
+            New chat in <span className="font-semibold">{activeProjectTitle}</span>
           </>
         ),
         searchTitle: `New thread in ${activeProjectTitle}`,
@@ -1297,8 +1376,8 @@ function OpenCommandPaletteDialog(props: {
     actionItems.push({
       kind: "submenu",
       value: "action:new-thread-in",
-      searchTerms: ["new thread", "project", "pick", "choose", "select"],
-      title: "New thread in...",
+      searchTerms: ["new thread", "client", "project", "pick", "choose", "select"],
+      title: "New chat in client or project…",
       icon: <SquarePenIcon className={ITEM_ICON_CLASS} />,
       addonIcon: <SquarePenIcon className={ADDON_ICON_CLASS} />,
       groups: [{ value: NEW_THREAD_IN_GROUP, label: "Projects", items: projectThreadItems }],
@@ -1550,7 +1629,7 @@ function OpenCommandPaletteDialog(props: {
       "url",
       "environment",
     ],
-    title: "Add project",
+    title: "Add working folder",
     icon: <FolderPlusIcon className={ITEM_ICON_CLASS} />,
     keepOpen: true,
     run: async () => {
@@ -1717,10 +1796,14 @@ function OpenCommandPaletteDialog(props: {
         "remove",
         "t3.json",
       ],
-      title: "Project settings",
-      description: contextualProjectGroup.displayName,
+      title: activeHubProject ? "Open project" : "Working folder settings",
+      description: activeHubProject?.title ?? contextualProjectGroup.displayName,
       icon: <FolderIcon className={ITEM_ICON_CLASS} />,
       run: async () => {
+        if (activeHubProject) {
+          await openProject(activeHubProject);
+          return;
+        }
         await navigate({
           to: "/projects/$projectKey",
           params: { projectKey: contextualProjectGroup.projectKey },

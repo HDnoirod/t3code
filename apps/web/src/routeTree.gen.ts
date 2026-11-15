@@ -10,10 +10,14 @@
 
 import { Route as rootRouteImport } from './routes/__root'
 import { Route as WelcomeRouteImport } from './routes/welcome'
+import { Route as ToolboxRouteImport } from './routes/toolbox'
 import { Route as PairRouteImport } from './routes/pair'
+import { Route as NotesRouteImport } from './routes/notes'
+import { Route as HubRouteImport } from './routes/hub'
 import { Route as GuestRouteImport } from './routes/guest'
 import { Route as ConnectAgentRouteImport } from './routes/connect-agent'
 import { Route as ConnectRouteImport } from './routes/connect'
+import { Route as CalendarRouteImport } from './routes/calendar'
 import { Route as ApproveAgentRouteImport } from './routes/approve-agent'
 import { Route as ChatRouteImport } from './routes/_chat'
 import { Route as ChatIndexRouteImport } from './routes/_chat.index'
@@ -58,9 +62,24 @@ const WelcomeRoute = WelcomeRouteImport.update({
   path: '/welcome',
   getParentRoute: () => rootRouteImport,
 } as any)
+const ToolboxRoute = ToolboxRouteImport.update({
+  id: '/toolbox',
+  path: '/toolbox',
+  getParentRoute: () => rootRouteImport,
+} as any)
 const PairRoute = PairRouteImport.update({
   id: '/pair',
   path: '/pair',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const NotesRoute = NotesRouteImport.update({
+  id: '/notes',
+  path: '/notes',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const HubRoute = HubRouteImport.update({
+  id: '/hub',
+  path: '/hub',
   getParentRoute: () => rootRouteImport,
 } as any)
 const GuestRoute = GuestRouteImport.update({
@@ -76,6 +95,11 @@ const ConnectAgentRoute = ConnectAgentRouteImport.update({
 const ConnectRoute = ConnectRouteImport.update({
   id: '/connect',
   path: '/connect',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const CalendarRoute = CalendarRouteImport.update({
+  id: '/calendar',
+  path: '/calendar',
   getParentRoute: () => rootRouteImport,
 } as any)
 const ApproveAgentRoute = ApproveAgentRouteImport.update({
@@ -277,10 +301,14 @@ const ChatEnvironmentIdThreadIdRoute =
 export interface FileRoutesByFullPath {
   '/': typeof ChatIndexRoute
   '/approve-agent': typeof ApproveAgentRoute
+  '/calendar': typeof CalendarRoute
   '/connect': typeof ConnectRoute
   '/connect-agent': typeof ConnectAgentRoute
   '/guest': typeof GuestRoute
+  '/hub': typeof HubRoute
+  '/notes': typeof NotesRoute
   '/pair': typeof PairRoute
+  '/toolbox': typeof ToolboxRoute
   '/welcome': typeof WelcomeRoute
   '/new': typeof ChatNewRoute
   '/pull-requests': typeof ChatPullRequestsRoute
@@ -320,10 +348,14 @@ export interface FileRoutesByFullPath {
 }
 export interface FileRoutesByTo {
   '/approve-agent': typeof ApproveAgentRoute
+  '/calendar': typeof CalendarRoute
   '/connect': typeof ConnectRoute
   '/connect-agent': typeof ConnectAgentRoute
   '/guest': typeof GuestRoute
+  '/hub': typeof HubRoute
+  '/notes': typeof NotesRoute
   '/pair': typeof PairRoute
+  '/toolbox': typeof ToolboxRoute
   '/welcome': typeof WelcomeRoute
   '/new': typeof ChatNewRoute
   '/pull-requests': typeof ChatPullRequestsRoute
@@ -366,10 +398,14 @@ export interface FileRoutesById {
   __root__: typeof rootRouteImport
   '/_chat': typeof ChatRouteWithChildren
   '/approve-agent': typeof ApproveAgentRoute
+  '/calendar': typeof CalendarRoute
   '/connect': typeof ConnectRoute
   '/connect-agent': typeof ConnectAgentRoute
   '/guest': typeof GuestRoute
+  '/hub': typeof HubRoute
+  '/notes': typeof NotesRoute
   '/pair': typeof PairRoute
+  '/toolbox': typeof ToolboxRoute
   '/welcome': typeof WelcomeRoute
   '/_chat/new': typeof ChatNewRoute
   '/_chat/pull-requests': typeof ChatPullRequestsRoute
@@ -413,10 +449,14 @@ export interface FileRouteTypes {
   fullPaths:
     | '/'
     | '/approve-agent'
+    | '/calendar'
     | '/connect'
     | '/connect-agent'
     | '/guest'
+    | '/hub'
+    | '/notes'
     | '/pair'
+    | '/toolbox'
     | '/welcome'
     | '/new'
     | '/pull-requests'
@@ -456,10 +496,14 @@ export interface FileRouteTypes {
   fileRoutesByTo: FileRoutesByTo
   to:
     | '/approve-agent'
+    | '/calendar'
     | '/connect'
     | '/connect-agent'
     | '/guest'
+    | '/hub'
+    | '/notes'
     | '/pair'
+    | '/toolbox'
     | '/welcome'
     | '/new'
     | '/pull-requests'
@@ -501,10 +545,14 @@ export interface FileRouteTypes {
     | '__root__'
     | '/_chat'
     | '/approve-agent'
+    | '/calendar'
     | '/connect'
     | '/connect-agent'
     | '/guest'
+    | '/hub'
+    | '/notes'
     | '/pair'
+    | '/toolbox'
     | '/welcome'
     | '/_chat/new'
     | '/_chat/pull-requests'
@@ -547,10 +595,14 @@ export interface FileRouteTypes {
 export interface RootRouteChildren {
   ChatRoute: typeof ChatRouteWithChildren
   ApproveAgentRoute: typeof ApproveAgentRoute
+  CalendarRoute: typeof CalendarRoute
   ConnectRoute: typeof ConnectRoute
   ConnectAgentRoute: typeof ConnectAgentRoute
   GuestRoute: typeof GuestRoute
+  HubRoute: typeof HubRoute
+  NotesRoute: typeof NotesRoute
   PairRoute: typeof PairRoute
+  ToolboxRoute: typeof ToolboxRoute
   WelcomeRoute: typeof WelcomeRoute
   ProjectsProjectKeyRoute: typeof ProjectsProjectKeyRoute
   ThreadsEnvironmentIdThreadIdRoute: typeof ThreadsEnvironmentIdThreadIdRoute
@@ -565,11 +617,32 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof WelcomeRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/toolbox': {
+      id: '/toolbox'
+      path: '/toolbox'
+      fullPath: '/toolbox'
+      preLoaderRoute: typeof ToolboxRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/pair': {
       id: '/pair'
       path: '/pair'
       fullPath: '/pair'
       preLoaderRoute: typeof PairRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/notes': {
+      id: '/notes'
+      path: '/notes'
+      fullPath: '/notes'
+      preLoaderRoute: typeof NotesRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/hub': {
+      id: '/hub'
+      path: '/hub'
+      fullPath: '/hub'
+      preLoaderRoute: typeof HubRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/guest': {
@@ -591,6 +664,13 @@ declare module '@tanstack/react-router' {
       path: '/connect'
       fullPath: '/connect'
       preLoaderRoute: typeof ConnectRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/calendar': {
+      id: '/calendar'
+      path: '/calendar'
+      fullPath: '/calendar'
+      preLoaderRoute: typeof CalendarRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/approve-agent': {
@@ -951,10 +1031,14 @@ const ChatRouteWithChildren = ChatRoute._addFileChildren(ChatRouteChildren)
 const rootRouteChildren: RootRouteChildren = {
   ChatRoute: ChatRouteWithChildren,
   ApproveAgentRoute: ApproveAgentRoute,
+  CalendarRoute: CalendarRoute,
   ConnectRoute: ConnectRoute,
   ConnectAgentRoute: ConnectAgentRoute,
   GuestRoute: GuestRoute,
+  HubRoute: HubRoute,
+  NotesRoute: NotesRoute,
   PairRoute: PairRoute,
+  ToolboxRoute: ToolboxRoute,
   WelcomeRoute: WelcomeRoute,
   ProjectsProjectKeyRoute: ProjectsProjectKeyRoute,
   ThreadsEnvironmentIdThreadIdRoute: ThreadsEnvironmentIdThreadIdRoute,

@@ -30,6 +30,9 @@ export type BuiltInDriversEnv =
   | PiDriverEnv
   | MuseDriverEnv;
 
+// Keep the upstream driver catalogue intact while exposing this fork's provider choices.
+const enabledKinds = new Set(["codex", "claudeAgent", "opencode"]);
+
 export const BUILT_IN_DRIVERS: ReadonlyArray<AnyProviderDriver<BuiltInDriversEnv>> = [
   CodexDriver,
   ClaudeDriver,
@@ -42,7 +45,7 @@ export const BUILT_IN_DRIVERS: ReadonlyArray<AnyProviderDriver<BuiltInDriversEnv
   PiDriver,
   MuseDriver,
   AcpRegistryDriver,
-];
+].filter((driver) => enabledKinds.has(driver.driverKind));
 
 export type BuiltInUsageReadersEnv =
   | ProviderUsageReaderEnv<typeof ClaudeDriver>
@@ -66,4 +69,4 @@ export const BUILT_IN_USAGE_DRIVERS: ReadonlyArray<
   MuseDriver,
   AntigravityDriver,
   CursorDriver,
-];
+].filter((driver) => enabledKinds.has(driver.driverKind));

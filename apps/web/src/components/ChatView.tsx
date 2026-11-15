@@ -206,7 +206,7 @@ import {
 } from "../hooks/useSettings";
 import { useNowMinute } from "../hooks/useNowMinute";
 import { usePanelAnimationSettings, usePanelPresence } from "../panelAnimations";
-import { useNewThreadHandler } from "../hooks/useHandleNewThread";
+import { useProjectChatHandler } from "../hooks/useProjectChatHandler";
 import { useOpenPanelPullRequestUrl } from "../hooks/useOpenPanelPullRequestUrl";
 import { isPreviewFocused } from "../lib/previewFocus";
 import { focusTerminalOnThreadEnter, getTerminalFocusOwner } from "../lib/terminalFocus";
@@ -428,7 +428,7 @@ export default function ChatView(props: ChatViewProps) {
   const canOperateThread = useEnvironmentScope(environmentId, AuthOrchestrationOperateScope);
   const canOperateTerminal = useEnvironmentScope(environmentId, AuthTerminalOperateScope);
   const draftId = routeKind === "draft" ? props.draftId : null;
-  const handleNewThread = useNewThreadHandler();
+  const { handleNewThread } = useProjectChatHandler();
   const routeThreadRef = scopeThreadRef(environmentId, threadId);
   const routeThreadKey = scopedThreadKey(routeThreadRef);
   const currentRouteThreadKeyRef = useRef<string | null>(routeThreadKey);
@@ -3490,6 +3490,7 @@ export default function ChatView(props: ChatViewProps) {
                 attachFollowComposerOverlay(overlay);
               }}
               inert={isRevertingCheckpoint}
+              data-seasonal-canvas="chat"
               data-chat-composer-overlay="true"
               className={
                 isDraftHeroState
@@ -3529,6 +3530,7 @@ export default function ChatView(props: ChatViewProps) {
                         : undefined
                     }
                   >
+                    {routeKind === "server" && <HubChatContext threadRef={routeThreadRef} />}
                     <ChildThreadApprovals threadRef={activeThreadRef} />
                     <div className="relative">
                       <ComposerSurface.Shell contextRow={showComposerContextStrip}>
@@ -4009,3 +4011,4 @@ function PreviewSessionSync(props: { readonly threadRef: ScopedThreadRef }) {
   usePreviewSession(props.threadRef);
   return null;
 }
+import { HubChatContext } from "./workspaceHub/HubChatContext";

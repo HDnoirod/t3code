@@ -1,6 +1,13 @@
 /* Clerk injects its component styles into the clerk layer (clerkAppearance.cssLayerName). */
 @layer theme, base, clerk, components, utilities;
 @import "tailwindcss";
+@import "./christmasDecorations.css";
+@import "./components/timeTracking/timeTracking.css";
+@import "./components/workspaceHub/workspaceHub.css";
+@import "./components/workspaceHub/projectSidebar.css";
+@import "./components/workspaceHub/projectHome.css";
+@import "./components/workspaceHub/workspaceOverview.css";
+@import "./components/toolbox/toolbox.css";
 
 @custom-variant dark (&:is(.dark, .dark *));
 @custom-variant light (&:not(.dark, .dark *));
@@ -1822,6 +1829,10 @@ code {
   --pele-border: color-mix(in srgb, var(--foreground) 28%, transparent);
   --pele-accent: var(--primary);
   --pele-critical: var(--destructive);
+}
+
+@utility no-drag {
+  -webkit-app-region: no-drag;
 }
 
 /* Window drag region (frameless titlebar) */

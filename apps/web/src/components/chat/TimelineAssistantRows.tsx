@@ -1,3 +1,4 @@
+import { openQuickCapture } from "../workspaceHub/hub";
 import { shouldPreserveAssistantLineBreaks } from "@t3tools/shared/markdownPipeline";
 import { type RunId } from "@t3tools/contracts";
 import { canForkProjectedAssistantItem } from "@t3tools/client-runtime/state/thread-workflows";
@@ -186,6 +187,21 @@ function AssistantMessageMeta({
         showCopyButton={showCopyButton}
         streaming={copyStreaming}
       />
+      {!message.streaming && message.text && (
+        <Button
+          size="xs"
+          variant="ghost"
+          onClick={() =>
+            openQuickCapture({
+              body: message.text,
+              environmentId: ctx.activeThreadEnvironmentId,
+              ...(ctx.threadRef ? { threadId: ctx.threadRef.threadId } : {}),
+            })
+          }
+        >
+          Save note
+        </Button>
+      )}
       {projectedItem?.item.type === "assistant_message" ? (
         <AssistantForkButton projectedItem={projectedItem} />
       ) : null}

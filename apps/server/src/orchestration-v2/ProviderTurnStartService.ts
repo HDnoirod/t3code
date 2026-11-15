@@ -1,3 +1,4 @@
+import { ProjectContextForTurn } from "../persistence/ProjectFolderContext.ts";
 import { modelSelectionsEqual } from "@t3tools/shared/model";
 import { projectComposerContextForProvider } from "@t3tools/shared/composerContextReferences";
 import {
@@ -148,6 +149,7 @@ export const layer: Layer.Layer<
 > = Layer.effect(
   ProviderTurnStartServiceV2,
   Effect.gen(function* () {
+    const hubContext = yield* ProjectContextForTurn;
     const eventSink = yield* EventSink.EventSinkV2;
     const turnAnalytics = yield* ProviderUsageAnalytics.ProviderTurnAnalytics;
     const contextHandoffService = yield* ContextHandoffService.ContextHandoffServiceV2;
@@ -831,10 +833,15 @@ export const layer: Layer.Layer<
       });
       let effectiveHandoffs = handoffs;
       let resumeFellBack = false;
-      const userText = projectComposerContextForProvider({
+      const projectContext = yield* hubContext({ threadId: input.threadId });
+      const requestText = projectComposerContextForProvider({
         text: message.text,
         records: message.context?.records ?? [],
       });
+      const userText =
+        projectContext && !isCompactionCommandMessage(message) && parseGoalCommand(message) === null
+          ? `${projectContext}\n\nUser request:\n${requestText}`
+          : requestText;
       // Native goal commands go verbatim; handoff history waits a turn.
       const goalDriver =
         session.driver === "codex" ||
