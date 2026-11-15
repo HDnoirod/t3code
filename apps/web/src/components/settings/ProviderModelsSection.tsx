@@ -26,7 +26,6 @@ import { CustomModelEditor } from "./CustomModelEditor";
 const CUSTOM_MODEL_PLACEHOLDER_BY_KIND: Partial<Record<ProviderDriverKind, string>> = {
   [ProviderDriverKind.make("codex")]: "gpt-6.7-codex-ultra-preview",
   [ProviderDriverKind.make("claudeAgent")]: "claude-sonnet-5",
-  [ProviderDriverKind.make("cursor")]: "claude-sonnet-4-6",
   [ProviderDriverKind.make("opencode")]: "openai/gpt-5",
 };
 
@@ -34,7 +33,7 @@ const CUSTOM_MODEL_PLACEHOLDER_BY_KIND: Partial<Record<ProviderDriverKind, strin
 const FILTER_THRESHOLD = 8;
 
 /**
- * Short capability words shown after a model's slug. Claude and Cursor report
+ * Short capability words shown after a model's slug. Claude reports
  * fast mode as a boolean `fastMode` option; Codex reports it as a
  * `serviceTier` select whose fast tier is labelled "Fast" (catalog id
  * `priority`, or `fast` from the speed-tier fallback), matching the composer.
@@ -223,7 +222,6 @@ export function ProviderModelsSection({
   }, [displayModels]);
 
   const handleAdd = () => {
-    if (driverKind === "antigravity") return;
     const normalized = normalizeCustomModelSlug(input);
     if (!normalized) {
       setError("Enter a model slug.");
@@ -534,7 +532,7 @@ export function ProviderModelsSection({
             {hiddenCount > 0 ? ` · ${hiddenCount} hidden` : ""}
           </span>
         </div>
-        {driverKind !== "antigravity" && !isAdding ? (
+        {!isAdding ? (
           <Button
             type="button"
             size="xs"
@@ -592,7 +590,7 @@ export function ProviderModelsSection({
         })}
       </div>
 
-      {driverKind === "antigravity" ? null : isAdding ? (
+      {isAdding ? (
         <div className="mt-3 flex flex-col gap-2 sm:flex-row">
           <Input
             id={`provider-instance-${instanceId}-custom-model`}
@@ -627,7 +625,7 @@ export function ProviderModelsSection({
         </div>
       ) : null}
 
-      {driverKind !== "antigravity" && error ? (
+      {error ? (
         <p className="mt-2 text-xs text-destructive">{error}</p>
       ) : null}
     </div>

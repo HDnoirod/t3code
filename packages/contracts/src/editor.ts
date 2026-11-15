@@ -20,15 +20,6 @@ type EditorDefinition = {
 };
 
 export const EDITORS = [
-  {
-    id: "cursor",
-    label: "Cursor",
-    commands: ["cursor"],
-    // File and workspace opens must target the IDE even when the Agents Window is active.
-    baseArgs: ["--classic"],
-    launchStyle: "goto",
-    remoteScheme: "cursor",
-  },
   { id: "trae", label: "Trae", commands: ["trae"], launchStyle: "goto" },
   { id: "kiro", label: "Kiro", commands: ["kiro"], baseArgs: ["ide"], launchStyle: "goto" },
   {
@@ -59,7 +50,6 @@ export const EDITORS = [
     launchStyle: "direct-path",
     remoteScheme: "zed",
   },
-  { id: "antigravity", label: "Antigravity", commands: ["agy"], launchStyle: "goto" },
   { id: "idea", label: "IntelliJ IDEA", commands: ["idea"], launchStyle: "line-column" },
   { id: "aqua", label: "Aqua", commands: ["aqua"], launchStyle: "line-column" },
   { id: "clion", label: "CLion", commands: ["clion"], launchStyle: "line-column" },

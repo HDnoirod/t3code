@@ -1,4 +1,30 @@
+import {
+  HubError,
+  HubEnsureProjectInput,
+  HubMoveProjectInput,
+  HubChatDefaultsInput,
+  HubChatDefaults,
+  HubSummary,
+  HubItem,
+  HubListInput,
+  HubList,
+  HubGetInput,
+  HubSaveInput,
+  HubExport,
+  HubCreateChatInput,
+  HubCreateChatResult,
+  HubChatContextInput,
+  HubChatContext,
+} from "./workspaceHub.ts";
 import * as Schema from "effect/Schema";
+import {
+  TimeTrackingError,
+  TimeTrackingListInput,
+  TimeTrackingMutation,
+  TimeTrackingSnapshot,
+  TimeTrackingReportInput,
+  TimeTrackingReport,
+} from "./timeTracking.ts";
 import * as Rpc from "effect/unstable/rpc/Rpc";
 import * as RpcGroup from "effect/unstable/rpc/RpcGroup";
 import { NonNegativeInt, TrimmedNonEmptyString } from "./baseSchemas.ts";
@@ -8,8 +34,6 @@ import {
   ProviderAuthState,
   ProviderAuthStartInput,
   ProviderAuthRespondInput,
-  ProviderInstallCancelInput,
-  ProviderInstallState,
   ProviderSetupError,
   ProviderSetupInput,
 } from "./providerSetup.ts";
@@ -305,10 +329,6 @@ export const WS_METHODS = {
   providerAuthCancel: "provider.auth.cancel",
   providerAuthLogout: "provider.auth.logout",
   providerAuthSubscribe: "provider.auth.subscribe",
-  providerInstallStart: "provider.install.start",
-  providerInstallCancel: "provider.install.cancel",
-  providerInstallSubscribe: "provider.install.subscribe",
-  providerInstallRemove: "provider.install.remove",
 
   // VCS methods
   vcsPull: "vcs.pull",
@@ -362,6 +382,18 @@ export const WS_METHODS = {
 
   // Server meta
   serverProbe: "server.probe",
+  hubList: "hub.list",
+  hubGet: "hub.get",
+  hubSave: "hub.save",
+  hubMoveProject: "hub.moveProject",
+  hubChatDefaults: "hub.chatDefaults",
+  hubEnsureProject: "hub.ensureProject",
+  hubExport: "hub.export",
+  hubCreateChat: "hub.createChat",
+  hubChatContext: "hub.chatContext",
+  timeTrackingList: "timeTracking.list",
+  timeTrackingMutate: "timeTracking.mutate",
+  timeTrackingReport: "timeTracking.report",
   serverGetConfig: "server.getConfig",
   serverRefreshProviders: "server.refreshProviders",
   serverUpdateProvider: "server.updateProvider",
@@ -536,31 +568,6 @@ const WsProviderAuthSubscribeRpc = Rpc.make(WS_METHODS.providerAuthSubscribe, {
   success: ProviderAuthState,
   error: ProviderSetupRpcError,
   stream: true,
-});
-
-const WsProviderInstallStartRpc = Rpc.make(WS_METHODS.providerInstallStart, {
-  payload: ProviderSetupInput,
-  success: ProviderInstallState,
-  error: ProviderSetupRpcError,
-});
-
-const WsProviderInstallCancelRpc = Rpc.make(WS_METHODS.providerInstallCancel, {
-  payload: ProviderInstallCancelInput,
-  success: ProviderInstallState,
-  error: ProviderSetupRpcError,
-});
-
-const WsProviderInstallSubscribeRpc = Rpc.make(WS_METHODS.providerInstallSubscribe, {
-  payload: ProviderSetupInput,
-  success: ProviderInstallState,
-  error: ProviderSetupRpcError,
-  stream: true,
-});
-
-const WsProviderInstallRemoveRpc = Rpc.make(WS_METHODS.providerInstallRemove, {
-  payload: ProviderSetupInput,
-  success: ProviderInstallState,
-  error: ProviderSetupRpcError,
 });
 
 const WsServerUpdateServerRpc = Rpc.make(WS_METHODS.serverUpdateServer, {
@@ -1392,6 +1399,66 @@ const WsSubscribeResourceTelemetryRpc = Rpc.make(WS_METHODS.subscribeResourceTel
 });
 
 export const WsRpcGroup = RpcGroup.make(
+  Rpc.make(WS_METHODS.hubChatDefaults, {
+    payload: HubChatDefaultsInput,
+    success: HubChatDefaults,
+    error: Schema.Union([HubError, EnvironmentAuthorizationError]),
+  }),
+  Rpc.make(WS_METHODS.hubMoveProject, {
+    payload: HubMoveProjectInput,
+    success: HubSummary,
+    error: Schema.Union([HubError, EnvironmentAuthorizationError]),
+  }),
+  Rpc.make(WS_METHODS.hubEnsureProject, {
+    payload: HubEnsureProjectInput,
+    success: HubItem,
+    error: Schema.Union([HubError, EnvironmentAuthorizationError]),
+  }),
+  Rpc.make(WS_METHODS.hubCreateChat, {
+    payload: HubCreateChatInput,
+    success: HubCreateChatResult,
+    error: Schema.Union([HubError, EnvironmentAuthorizationError]),
+  }),
+  Rpc.make(WS_METHODS.hubChatContext, {
+    payload: HubChatContextInput,
+    success: HubChatContext,
+    error: Schema.Union([HubError, EnvironmentAuthorizationError]),
+  }),
+  Rpc.make(WS_METHODS.hubList, {
+    payload: HubListInput,
+    success: HubList,
+    error: Schema.Union([HubError, EnvironmentAuthorizationError]),
+  }),
+  Rpc.make(WS_METHODS.hubGet, {
+    payload: HubGetInput,
+    success: HubItem,
+    error: Schema.Union([HubError, EnvironmentAuthorizationError]),
+  }),
+  Rpc.make(WS_METHODS.hubSave, {
+    payload: HubSaveInput,
+    success: HubItem,
+    error: Schema.Union([HubError, EnvironmentAuthorizationError]),
+  }),
+  Rpc.make(WS_METHODS.hubExport, {
+    payload: Schema.Struct({}),
+    success: HubExport,
+    error: Schema.Union([HubError, EnvironmentAuthorizationError]),
+  }),
+  Rpc.make(WS_METHODS.timeTrackingReport, {
+    payload: TimeTrackingReportInput,
+    success: TimeTrackingReport,
+    error: Schema.Union([TimeTrackingError, EnvironmentAuthorizationError]),
+  }),
+  Rpc.make(WS_METHODS.timeTrackingList, {
+    payload: TimeTrackingListInput,
+    success: TimeTrackingSnapshot,
+    error: Schema.Union([TimeTrackingError, EnvironmentAuthorizationError]),
+  }),
+  Rpc.make(WS_METHODS.timeTrackingMutate, {
+    payload: TimeTrackingMutation,
+    success: Schema.Void,
+    error: Schema.Union([TimeTrackingError, EnvironmentAuthorizationError]),
+  }),
   WsServerProbeRpc,
   WsServerGetConfigRpc,
   WsServerRefreshProvidersRpc,
@@ -1403,10 +1470,6 @@ export const WsRpcGroup = RpcGroup.make(
   WsProviderAuthCancelRpc,
   WsProviderAuthLogoutRpc,
   WsProviderAuthSubscribeRpc,
-  WsProviderInstallStartRpc,
-  WsProviderInstallCancelRpc,
-  WsProviderInstallSubscribeRpc,
-  WsProviderInstallRemoveRpc,
   WsServerUpdateServerRpc,
   WsServerUpdateServerWithProgressRpc,
   WsServerCommitDesktopUpdateRpc,

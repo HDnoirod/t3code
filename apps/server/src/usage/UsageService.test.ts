@@ -101,7 +101,6 @@ const serviceLayers = (input: {
     ),
     Layer.provideMerge(
       Layer.succeed(HostProcessEnvironment, {
-        GROK_HOME: NodePath.join(input.home, "grok"),
         ...input.environment,
       }),
     ),
@@ -118,7 +117,6 @@ describe("UsageService", () => {
       const codexHome = NodePath.join(home, "codex-account");
       const alias = NodePath.join(home, "codex-alias");
       const claudeHome = NodePath.join(home, "claude-account");
-      const grokHome = NodePath.join(home, "grok-account");
       yield* Effect.promise(async () => {
         await NodeFSP.writeFile(transcript, claudeLine(1, 5));
         await NodeFSP.mkdir(NodePath.join(claudeHome, "projects"), { recursive: true });
@@ -145,22 +143,6 @@ describe("UsageService", () => {
           ]
             .map((line) => encodeUnknownJsonString(line))
             .join("\n") + "\n",
-        );
-        await NodeFSP.mkdir(NodePath.join(grokHome, "sessions", "session"), { recursive: true });
-        await NodeFSP.writeFile(
-          NodePath.join(grokHome, "sessions", "session", "updates.jsonl"),
-          encodeUnknownJsonString({
-            timestamp: Date.parse("2026-08-01T10:00:00Z") / 1000,
-            method: "_x.ai/session/update",
-            params: {
-              sessionId: "grok-account-session",
-              update: {
-                sessionUpdate: "turn_completed",
-                prompt_id: "prompt-1",
-                usage: { inputTokens: 10, outputTokens: 13 },
-              },
-            },
-          }) + "\n",
         );
       });
       const service = yield* UsageService.make.pipe(
@@ -191,17 +173,13 @@ describe("UsageService", () => {
                     { name: "CODEX_HOME", value: NodePath.join(home, "ignored"), sensitive: false },
                   ],
                 },
-                [ProviderInstanceId.make("grok-work")]: {
-                  driver: ProviderDriverKind.make("grok"),
-                  environment: [{ name: "GROK_HOME", value: grokHome, sensitive: false }],
-                },
               },
             },
           }),
         ),
       );
       const summary = yield* service.readSummary(WINDOW);
-      assert.strictEqual(totalOutputTokens(summary), 59);
+      assert.strictEqual(totalOutputTokens(summary), 46);
       yield* Effect.promise(() =>
         NodeFSP.rename(
           NodePath.join(codexHome, "sessions", "rollout.jsonl"),
@@ -217,10 +195,10 @@ describe("UsageService", () => {
       assert.deepStrictEqual(removed.buckets, summary.buckets);
 
       const sources = summary.sources.filter((source) => source.status === "ok");
-      assert.strictEqual(sources.length, 4);
+      assert.strictEqual(sources.length, 3);
       assert.strictEqual(
         sources.reduce((sum, source) => sum + source.scannedFiles, 0),
-        4,
+        3,
       );
       assert.strictEqual(
         sources.filter((source) => source.fingerprint.provider === "codex").length,
@@ -260,7 +238,7 @@ describe("UsageService", () => {
           assert.strictEqual(totalOutputTokens(first), 7);
           assert.include(
             first.sources.map((source) => source.fingerprint.resolvedHomePath),
-            NodePath.join(configured, "projects"),
+            yield* Effect.promise(() => NodeFSP.realpath(NodePath.join(configured, "projects"))),
           );
           yield* settingsService.updateSettings({
             providerInstances: {
@@ -277,7 +255,7 @@ describe("UsageService", () => {
           assert.strictEqual(totalOutputTokens(second), 8);
           assert.include(
             second.sources.map((source) => source.fingerprint.resolvedHomePath),
-            NodePath.join(environmentHome, "projects"),
+            yield* Effect.promise(() => NodeFSP.realpath(NodePath.join(environmentHome, "projects"))),
           );
         }).pipe(
           Effect.provide(
@@ -340,11 +318,6 @@ describe("UsageService", () => {
           summary.sources.find((source) => source.fingerprint.provider === "codex")?.fingerprint
             .resolvedHomePath,
           NodePath.join(home, "inherited-codex", "sessions"),
-        );
-        assert.strictEqual(
-          summary.sources.find((source) => source.fingerprint.provider === "grok")?.fingerprint
-            .resolvedHomePath,
-          NodePath.join(home, "grok", "sessions"),
         );
       }).pipe(Effect.scoped),
   );
@@ -519,7 +492,7 @@ describe("UsageService", () => {
             exists: (path) =>
               fileSystem.exists(path).pipe(
                 Effect.tap(() => {
-                  if (path !== NodePath.join(home, "claude", "projects")) return Effect.void;
+                  if (!String(path).endsWith("/claude/projects")) return Effect.void;
                   homeProbes += 1;
                   return Deferred.succeed(
                     homeProbes === 1 ? firstScanStarted : secondScanStarted,

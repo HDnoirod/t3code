@@ -1,3 +1,4 @@
+import { openQuickCapture } from "../workspaceHub/hub";
 import { ArrowUpIcon, ClockIcon } from "lucide-react";
 import { ReadOnlySourcePreview } from "../files/AttachmentFilePreview";
 import { useRightPanelStore } from "~/rightPanelStore";
@@ -2442,6 +2443,21 @@ function AssistantMessageMeta({
         showCopyButton={showCopyButton}
         streaming={copyStreaming}
       />
+      {!message.streaming && message.text && (
+        <Button
+          size="xs"
+          variant="ghost"
+          onClick={() =>
+            openQuickCapture({
+              body: message.text,
+              environmentId: ctx.activeThreadEnvironmentId,
+              ...(ctx.threadRef ? { threadId: ctx.threadRef.threadId } : {}),
+            })
+          }
+        >
+          Save note
+        </Button>
+      )}
       {!message.streaming && (
         <Tooltip>
           <TooltipTrigger render={<p className="text-muted-foreground text-xs tabular-nums" />}>

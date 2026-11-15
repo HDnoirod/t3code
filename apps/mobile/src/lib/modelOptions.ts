@@ -61,7 +61,7 @@ function normalizeSelectionOptions(
       };
 }
 
-/** Whether a known Antigravity selection needs setup or a different model. */
+/** Whether the selected model is currently unavailable on this environment. */
 export function isModelSelectionUnavailable(
   config: T3ServerConfig | null | undefined,
   selection: ModelSelection | null | undefined,
@@ -72,12 +72,9 @@ export function isModelSelectionUnavailable(
   const provider = config.providers.find(
     (candidate) => candidate.instanceId === selection.instanceId,
   );
-  const driver =
-    provider?.driver ?? config.settings?.providerInstances[selection.instanceId]?.driver;
   return (
-    driver === "antigravity" &&
-    (!provider ||
-      !provider.enabled ||
+    !!provider &&
+    (!provider.enabled ||
       !provider.installed ||
       provider.auth.status === "unauthenticated" ||
       provider.availability === "unavailable" ||
@@ -85,11 +82,7 @@ export function isModelSelectionUnavailable(
   );
 }
 
-/**
- * Keep Antigravity selections when setup or catalog changes make them
- * unavailable. Other providers fall through to the server default when they
- * are disabled, missing, or signed out. Without config, keep stored selections.
- */
+/** Disabled, missing, or signed-out providers fall back to the server default. */
 export function resolveSelectableModelSelection(
   config: T3ServerConfig | null | undefined,
   selection: ModelSelection | null,
@@ -100,11 +93,6 @@ export function resolveSelectableModelSelection(
   const provider = config.providers.find(
     (candidate) => candidate.instanceId === selection.instanceId,
   );
-  const driver =
-    provider?.driver ?? config.settings?.providerInstances[selection.instanceId]?.driver;
-  if (driver === "antigravity") {
-    return selection;
-  }
   return provider &&
     provider.enabled &&
     provider.installed &&
@@ -113,11 +101,7 @@ export function resolveSelectableModelSelection(
     : null;
 }
 
-/**
- * Reject legacy models for implicit defaults, except Antigravity selections,
- * which must not silently change after a catalog update. Explicit picks in
- * the settings sheet are unaffected.
- */
+/** Reject legacy models for implicit defaults. Explicit picks remain available. */
 export function resolveDefaultableModelSelection(
   config: T3ServerConfig | null | undefined,
   selection: ModelSelection | null,
@@ -128,7 +112,7 @@ export function resolveDefaultableModelSelection(
   }
   const provider = config.providers.find((candidate) => candidate.instanceId === usable.instanceId);
   const model = provider?.models.find((candidate) => candidate.slug === usable.model);
-  return provider?.driver !== "antigravity" && model?.isLegacy === true ? null : usable;
+  return model?.isLegacy === true ? null : usable;
 }
 
 export function resolveNewTaskModelSelection(input: {
@@ -136,7 +120,9 @@ export function resolveNewTaskModelSelection(input: {
   readonly projectDefaultSelection: ModelSelection | null;
   readonly stickySelection: ModelSelection | null;
   readonly modelOptions: ReadonlyArray<ModelOption>;
+  readonly defaultAccountIssue?: string | null;
 }): ModelSelection | null {
+  if (!input.draftSelection && input.defaultAccountIssue) return null;
   return (
     input.draftSelection ??
     input.projectDefaultSelection ??
@@ -158,7 +144,7 @@ export function buildModelOptions(
       !provider.enabled ||
       !provider.installed ||
       provider.auth.status === "unauthenticated" ||
-      (provider.driver === "antigravity" && provider.availability === "unavailable")
+      provider.availability === "unavailable"
     ) {
       continue;
     }
@@ -193,10 +179,7 @@ export function buildModelOptions(
     if (existing) {
       options.set(key, {
         ...existing,
-        selection:
-          existing.providerDriver === "antigravity"
-            ? fallbackModelSelection
-            : normalizeSelectionOptions(fallbackModelSelection, existing.capabilities),
+        selection: normalizeSelectionOptions(fallbackModelSelection, existing.capabilities),
       });
     } else {
       const provider = config?.providers.find(

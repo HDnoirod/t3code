@@ -2,15 +2,14 @@
 
 ## Understand your usage
 
-**Usage** combines Codex, Claude Code, and Grok Build session history from your connected
+**Usage** combines Codex and Claude Code session history from your connected
 environments. It shows token use, cache savings, model breakdowns, and estimated API-equivalent
 cost. These estimates are not your subscription bill.
 
-Totals depend on the history available on each server. Grok turns without a saved completed-turn
-record are missing from the totals.
+Totals depend on the history available on each server.
 
 Usage includes each configured account's history, including disabled accounts. Custom homes follow
-the account's home setting or its `CODEX_HOME`, `CLAUDE_CONFIG_DIR`, or `GROK_HOME` environment
+the account's home setting or its `CODEX_HOME` or `CLAUDE_CONFIG_DIR` environment
 variable. Use absolute paths or `~/` paths in the account's environment settings; relative
 environment paths depend on each project's working directory and cannot be reliably discovered
 by Usage. Accounts sharing a history directory count once.
@@ -71,15 +70,7 @@ anything. The command is offered only for providers that appear under **Usage â†
 
 OpenCode Go reports its session, weekly, and monthly allowance when OpenCode runs locally in
 the environment. T3 cannot report limits for external OpenCode servers because their credentials
-belong to the remote server. Cursor reports
-its monthly allowance, including separate Auto and API usage, using a file-based CLI login or
-`CURSOR_AUTH_TOKEN`. Cursor's default macOS keychain login does not currently report limits.
-On macOS, use `AGENT_CLI_CREDENTIAL_STORE=file` when signing in and in the provider's environment
-to use a file-based login.
-
-Grok reports the remaining subscription allowance and reset time for its current billing period
-after signing in with `grok login`. Explicit `XAI_API_KEY` connections and custom authentication
-or endpoint configurations do not report subscription limits.
+belong to the remote server..
 
 API-key accounts may not report subscription limits. This also applies to Claude connections
 using a proxy through `ANTHROPIC_AUTH_TOKEN`.

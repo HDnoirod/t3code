@@ -5,6 +5,8 @@
 - [Install T3 Code](./user/install.md)
 - [Messages and context](./user/composer.md)
 - [Working with threads](./user/thread-sidebar.md)
+- [Time tracking](./user/time-tracking.md)
+- [Notes, projects and everyday tools](./user/workspace-hub.md)
 - [Permission modes](./user/permission-modes.md)
 - [Terminal history](./user/terminal.md)
 - [Source control](./user/source-control.md)
@@ -19,7 +21,7 @@
 - [Remote access](./user/remote-access.md)
 - [Running in the background](./user/background-service.md)
 - [Updating T3 Code](./user/updating.md)
-- Provider guides: [Codex](./user/providers-codex.md) · [Claude](./user/providers-claude.md) · [OpenCode](./user/providers-opencode.md) · [Antigravity](./user/providers-antigravity.md)
+- Provider guides: [Codex](./user/providers-codex.md) · [Claude](./user/providers-claude.md) · [OpenCode](./user/providers-opencode.md)
 
 ---
 

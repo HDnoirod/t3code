@@ -1,4 +1,5 @@
 import { withWorkspaceLease } from "../../workspace/workspaceLease.ts";
+import { makeWorkspaceHubContext } from "../../persistence/ProjectFolderContext.ts";
 import {
   type ChatAttachment,
   CommandId,
@@ -222,6 +223,7 @@ const make = Effect.gen(function* () {
   const vcsStatusBroadcaster = yield* VcsStatusBroadcaster;
   const textGeneration = yield* TextGeneration;
   const serverSettingsService = yield* ServerSettingsService;
+  const hubContext = yield* makeWorkspaceHubContext;
   /** Environment settings with the thread's project overrides applied. */
   const projectSettingsForThread = Effect.fnUntraced(function* (threadId: ThreadId) {
     const settings = yield* serverSettingsService.getSettings;
@@ -1483,18 +1485,22 @@ const make = Effect.gen(function* () {
       turnsAfterCompaction.set(event.payload.threadId, queued);
       return;
     }
-    const sendTurnRequest = yield* buildSendTurnRequestForThread({
-      threadId: event.payload.threadId,
-      messageText: projectComposerContextForProvider({
+    const sendTurnRequest = yield* Effect.gen(function* () {
+      const context = yield* hubContext({ threadId: event.payload.threadId });
+      const prompt = projectComposerContextForProvider({
         text: message.text,
         records: message.context?.records ?? [],
-      }),
-      ...(message.attachments !== undefined ? { attachments: message.attachments } : {}),
-      ...(event.payload.modelSelection !== undefined
-        ? { modelSelection: event.payload.modelSelection }
-        : {}),
-      interactionMode: event.payload.interactionMode,
-      createdAt: event.payload.createdAt,
+      });
+      return yield* buildSendTurnRequestForThread({
+        threadId: event.payload.threadId,
+        messageText: context.text ? `${context.text}\n\nUser request:\n${prompt}` : prompt,
+        ...(message.attachments !== undefined ? { attachments: message.attachments } : {}),
+        ...(event.payload.modelSelection !== undefined
+          ? { modelSelection: event.payload.modelSelection }
+          : {}),
+        interactionMode: event.payload.interactionMode,
+        createdAt: event.payload.createdAt,
+      });
     }).pipe(
       Effect.map(Option.some),
       Effect.catchCause((cause) => handleTurnStartFailure(cause).pipe(Effect.as(Option.none()))),

@@ -1178,8 +1178,7 @@ export function NewTaskDraftScreen(props: {
     }
     const draft = getComposerDraftSnapshot(draftKey);
     if (appAtomRegistry.get(composerContextImportsAtom)[draftKey]) return;
-    // Read the latest explicit pick. Antigravity selections stay unchanged
-    // when setup or a catalog change makes them unavailable.
+    // Read the latest explicit pick.
     const modelSelection =
       resolveSelectableModelSelection(
         selectedEnvironmentServerConfig,
@@ -1202,10 +1201,7 @@ export function NewTaskDraftScreen(props: {
       environmentConnected &&
       isModelSelectionUnavailable(selectedEnvironmentServerConfig, modelSelection)
     ) {
-      Alert.alert(
-        "Antigravity model unavailable",
-        "Set up Antigravity on web or desktop, or choose another model.",
-      );
+      Alert.alert("Model unavailable", "Choose an available model in this environment.");
       return;
     }
     // T3's own limits command is answered by the thread composer; a new task would
@@ -1588,6 +1584,12 @@ export function NewTaskDraftScreen(props: {
         </View>
       ) : null}
       <View className="pb-1">{workspaceControls}</View>
+
+      {flow.defaultAccountIssue ? (
+        <View className="px-3 py-2">
+          <Text className="text-muted-foreground text-sm">{flow.defaultAccountIssue}</Text>
+        </View>
+      ) : null}
 
       {modelUnavailable ? (
         <Pressable

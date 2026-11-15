@@ -66,7 +66,7 @@ const PROVIDER = ProviderDriverKind.make("opencode");
 /**
  * Version tag stamped into the OpenCode resume cursor. Bump if the cursor
  * shape changes so stale-shaped cursors written by older builds are ignored
- * rather than misread (mirrors GROK_RESUME_VERSION / CURSOR_RESUME_VERSION).
+ * rather than misread.
  */
 const OPENCODE_RESUME_VERSION = 1 as const;
 
@@ -3525,7 +3525,7 @@ export function makeOpenCodeAdapter(
             threadId: input.threadId,
             turnId,
             // Re-surface the durable cursor on every turn so the persisted binding
-            // is refreshed alongside last-seen/runtime state (mirrors Grok/Codex).
+            // is refreshed alongside last-seen/runtime state (mirrors Codex).
             ...(context.session.resumeCursor !== undefined
               ? { resumeCursor: context.session.resumeCursor }
               : {}),

@@ -1,4 +1,11 @@
+import { Link } from "@tanstack/react-router";
+import { useOpenProject } from "../workspaceHub/useOpenProject";
+import { scopedThreadKey } from "@t3tools/client-runtime/environment";
+import { useHubProjects } from "../workspaceHub/useHubProjects";
+import { useHubClients } from "../workspaceHub/useHubClients";
 import {
+  FREE_CHAT_WORKSPACE_ID,
+  clientIdForChatWorkspace,
   type EnvironmentId,
   type EditorId,
   type ProjectScript,
@@ -195,6 +202,17 @@ export const ChatHeader = memo(function ChatHeader({
   );
   if (!actionsCollapsed && actionsOpen) setActionsOpen(false);
   const primaryEnvironmentId = usePrimaryEnvironmentId();
+  const { owners } = useHubProjects();
+  const clients = useHubClients();
+  const clientId = clientIdForChatWorkspace(activeProject?.id ?? "");
+  const openProject = useOpenProject();
+  const hub = isServerThread
+    ? owners.get(scopedThreadKey(scopeThreadRef(activeThreadEnvironmentId, activeThreadId)))
+    : undefined;
+  const contextClientId = clientId ?? hub?.clientIds[0];
+  const client = clients.find(
+    (client) => client.id === contextClientId && client.environmentId === activeThreadEnvironmentId,
+  );
   const activeProjectName = activeProject?.title;
   const activeProjectCwd = activeProject?.workspaceRoot ?? null;
   const fileScripts = useT3ProjectFileScripts(
@@ -257,6 +275,7 @@ export const ChatHeader = memo(function ChatHeader({
     threadRef: isServerThread ? activeThreadRef : null,
     projectCwd: activeProjectCwd,
     onStartRename: startRename,
+    onOpenProject: hub ? () => void openProject(hub) : undefined,
   });
   const titleButtonRef = useRef<HTMLButtonElement | null>(null);
   const titleMenuTimerRef = useRef<number | null>(null);
@@ -404,10 +423,49 @@ export const ChatHeader = memo(function ChatHeader({
         ariaLabel="Thread breadcrumb"
         className="flex-1 overflow-clip [overflow-clip-margin:2px]"
       >
-        {/* The project always leads the header: knowing which project a
-            thread lives in is priority zero, and the thread title alone
-            doesn't answer it. */}
-        {activeProject ? (
+        {/* Match the sidebar hierarchy so a chat always has a clear way back. */}
+        {clientId ? (
+          <>
+            <WorkspaceBreadcrumbItem className="shrink">
+              <Link to="/hub" search={{ environment: activeThreadEnvironmentId, client: clientId }}>
+                <WorkspaceBreadcrumbText className="max-w-40">
+                  {client?.name ?? "Client chat"}
+                </WorkspaceBreadcrumbText>
+              </Link>
+            </WorkspaceBreadcrumbItem>
+            <WorkspaceBreadcrumbSeparator />
+          </>
+        ) : hub ? (
+          <>
+            {client && !isNarrowHeader && (
+              <>
+                <WorkspaceBreadcrumbItem className="shrink">
+                  <Link
+                    to="/hub"
+                    search={{ environment: activeThreadEnvironmentId, client: client.id }}
+                  >
+                    <WorkspaceBreadcrumbText className="max-w-28">
+                      {client.name}
+                    </WorkspaceBreadcrumbText>
+                  </Link>
+                </WorkspaceBreadcrumbItem>
+                <WorkspaceBreadcrumbSeparator />
+              </>
+            )}
+            <WorkspaceBreadcrumbItem className="shrink">
+              <button type="button" onClick={() => void openProject(hub)}>
+                <WorkspaceBreadcrumbText className="max-w-40">{hub.title}</WorkspaceBreadcrumbText>
+              </button>
+            </WorkspaceBreadcrumbItem>
+            <WorkspaceBreadcrumbSeparator>
+              <WorkspaceBreadcrumbText>/</WorkspaceBreadcrumbText>
+            </WorkspaceBreadcrumbSeparator>
+          </>
+        ) : activeProject?.id === FREE_CHAT_WORKSPACE_ID ? (
+          <WorkspaceBreadcrumbItem>
+            <WorkspaceBreadcrumbText>Free chats</WorkspaceBreadcrumbText>
+          </WorkspaceBreadcrumbItem>
+        ) : activeProject ? (
           <>
             <WorkspaceBreadcrumbItem className="shrink">
               <Tooltip>

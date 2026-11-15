@@ -82,7 +82,6 @@ import { DISCONNECTED_COMPOSER_PLACEHOLDER } from "../../composerPlaceholder";
 import { listContinuationForEnter, listIndentForTab } from "../../composer-list-continuation";
 import {
   deriveComposerSendState,
-  getAntigravitySendBlockReason,
   readFileAsDataUrl,
   resolveComposerInteractionMode,
   resolveComposerProviderSelection,
@@ -1925,17 +1924,12 @@ export const ChatComposer = memo(function ChatComposer(props: ChatComposerProps)
     projectModelSelection: activeProjectDefaultModelSelection,
     settings,
   });
-  const providerSendBlockReason = getAntigravitySendBlockReason(
-    selectedProviderEntry?.snapshot,
-    selectedModel,
-  );
   const sendDisabledReason =
     externalSendDisabledReason ??
     (multipleModelSelections?.length === 0 ? "Select at least one model." : null) ??
     (activePendingProgress
       ? attachmentBlockReason
-      : (attachmentBlockReason ??
-        (multipleModelSelections === null ? providerSendBlockReason : null)));
+      : attachmentBlockReason);
   const isSendDisabled = sendDisabledReason !== null;
   const selectedProviderStatus = useMemo(
     () => selectedProviderEntry?.snapshot ?? null,
@@ -6024,7 +6018,7 @@ export const ChatComposer = memo(function ChatComposer(props: ChatComposerProps)
             : null,
         providerAvailable:
           multipleModelSelections !== null ||
-          (!noProviderAvailable && providerSendBlockReason === null),
+          !noProviderAvailable,
         selectedProvider,
         selectedModel,
         selectedProviderModels,
@@ -6080,7 +6074,6 @@ export const ChatComposer = memo(function ChatComposer(props: ChatComposerProps)
       setMultipleModelSelections,
       routeKind,
       noProviderAvailable,
-      providerSendBlockReason,
       selectedPromptEffort,
       selectedProvider,
       selectedProviderModels,

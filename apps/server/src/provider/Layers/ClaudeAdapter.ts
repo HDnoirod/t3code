@@ -1725,7 +1725,7 @@ function resultOutcome(
 function streamKindFromDeltaType(deltaType: string): ClaudeTextStreamKind {
   // Claude never returns the raw chain of thought. A thinking delta is the
   // API-side summary (or a progress-update sentence) when display is
-  // summarized; map it onto the summary stream so it shares the Codex/Grok
+  // summarized; map it onto the summary stream so it shares the Codex
   // reasoning-summary path rather than looking like a raw trace we do not have.
   return deltaType.includes("thinking") ? "reasoning_summary_text" : "assistant_text";
 }

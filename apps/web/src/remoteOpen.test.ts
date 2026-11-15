@@ -129,12 +129,6 @@ describe("buildRemoteOpenUrl", () => {
     ).toBe("vscode://vscode-remote/ssh-remote+sol.tail1234.ts.net/home/theo/code/my%20repo");
   });
 
-  it("uses the fork's scheme", () => {
-    expect(buildRemoteOpenUrl({ editor: "cursor", host: "sol", absolutePath: "/tmp/x" })).toBe(
-      "cursor://vscode-remote/ssh-remote+sol/tmp/x",
-    );
-  });
-
   it("roots Windows paths", () => {
     expect(
       buildRemoteOpenUrl({ editor: "vscode", host: "sol", absolutePath: "C:\\Users\\theo" }),

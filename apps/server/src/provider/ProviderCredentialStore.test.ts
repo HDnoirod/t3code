@@ -20,10 +20,10 @@ it.effect("isolates provider bindings and preserves opaque credentials", () =>
       create: () => Effect.die("unused"),
       getOrCreateRandom: () => Effect.die("unused"),
     });
-    const a = yield* ProviderCredentialStore.make("cursor", "../../personal").pipe(
+    const a = yield* ProviderCredentialStore.make("opencode", "../../personal").pipe(
       Effect.provideService(ServerSecretStore, secretStore),
     );
-    const b = yield* ProviderCredentialStore.make("cursor", "work").pipe(
+    const b = yield* ProviderCredentialStore.make("opencode", "work").pipe(
       Effect.provideService(ServerSecretStore, secretStore),
     );
     const c = yield* ProviderCredentialStore.make("other", "../../personal").pipe(

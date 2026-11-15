@@ -1,3 +1,7 @@
+import { makeWorkspaceHubContext } from "./persistence/ProjectFolderContext.ts";
+import { makeWorkspaceHubStore } from "./persistence/WorkspaceHub.ts";
+import { makeWorkspaceHubChats } from "./persistence/WorkspaceHubChats.ts";
+import { makeHubChatDefaults } from "./persistence/HubChatDefaults.ts";
 import {
   sameUsageLimitCommandCoverage,
   withUsageLimitsCommands,
@@ -116,7 +120,6 @@ import * as ProviderSessionDirectory from "./provider/Services/ProviderSessionDi
 import * as ProviderMaintenanceRunner from "./provider/providerMaintenanceRunner.ts";
 import { ProviderAuthService } from "./provider/Services/ProviderAuthService.ts";
 import { ProviderInstanceRegistry } from "./provider/Services/ProviderInstanceRegistry.ts";
-import { makeProviderInstallation } from "./provider/providerInstallation.ts";
 import * as ServerSelfUpdate from "./cloud/selfUpdate.ts";
 import * as ServerLifecycleEvents from "./serverLifecycleEvents.ts";
 import * as ServerRuntimeStartup from "./serverRuntimeStartup.ts";
@@ -162,6 +165,7 @@ import * as PullRequestService from "./pullRequest/PullRequestService.ts";
 import { listLinkedPullRequestThreads } from "./pullRequest/linkedThreads.ts";
 import { pullRequestSyncKey } from "./pullRequest/pullRequestSyncKey.ts";
 import * as SqlClient from "effect/unstable/sql/SqlClient";
+import { makeTimeTrackingStore } from "./persistence/TimeTracking.ts";
 import * as PullRequestSyncReactor from "./orchestration/PullRequestSyncReactor.ts";
 import * as SourceControlDiscovery from "./sourceControl/SourceControlDiscovery.ts";
 import * as SourceControlRepositoryService from "./sourceControl/SourceControlRepositoryService.ts";
@@ -505,6 +509,11 @@ const makeWsRpcLayer = (
       const currentSessionId = currentSession.sessionId;
       const crypto = yield* Crypto.Crypto;
       const sql = yield* SqlClient.SqlClient;
+      const timeTracking = yield* makeTimeTrackingStore;
+      const workspaceHub = yield* makeWorkspaceHubStore;
+      const hubContext = yield* makeWorkspaceHubContext;
+      const createHubChat = yield* makeWorkspaceHubChats;
+      const hubChatDefaults = yield* makeHubChatDefaults;
       const projectionSnapshotQuery = yield* ProjectionSnapshotQuery.ProjectionSnapshotQuery;
       /** A reference's host-level link key; the project's own host where the ref names none. */
       const resolvePullRequestSyncKey = (reference: PullRequestRef) =>
@@ -570,7 +579,6 @@ const makeWsRpcLayer = (
       const providerMaintenanceRunner = yield* ProviderMaintenanceRunner.ProviderMaintenanceRunner;
       const providerAuth = yield* ProviderAuthService;
       const providerInstances = yield* ProviderInstanceRegistry;
-      const providerInstallation = yield* makeProviderInstallation();
       const serverUpdate = yield* ServerSelfUpdate.ServerSelfUpdate;
       const config = yield* ServerConfig.ServerConfig;
       const lifecycleEvents = yield* ServerLifecycleEvents.ServerLifecycleEvents;
@@ -1868,6 +1876,8 @@ const makeWsRpcLayer = (
             threadResumeCompletionMarker: true,
             threadSnapshotPagination: true,
             reasoningMessages: true,
+            hubChatDefaults: true,
+            clientChats: true,
           };
         });
 
@@ -1877,6 +1887,30 @@ const makeWsRpcLayer = (
           .pipe(Effect.ignoreCause({ log: true }), Effect.forkDetach, Effect.asVoid);
 
       return WsRpcGroup.of({
+        [WS_METHODS.hubChatDefaults]: (input) =>
+          observeRpcEffect(WS_METHODS.hubChatDefaults, hubChatDefaults(input)),
+        [WS_METHODS.hubMoveProject]: (input) =>
+          observeRpcEffect(WS_METHODS.hubMoveProject, workspaceHub.moveProject(input)),
+        [WS_METHODS.hubEnsureProject]: (input) =>
+          observeRpcEffect(WS_METHODS.hubEnsureProject, workspaceHub.ensureProject(input)),
+        [WS_METHODS.hubCreateChat]: (input) =>
+          observeRpcEffect(WS_METHODS.hubCreateChat, createHubChat(input, dispatchFromClient)),
+        [WS_METHODS.hubChatContext]: (input) =>
+          observeRpcEffect(WS_METHODS.hubChatContext, hubContext(input)),
+        [WS_METHODS.hubList]: (input) =>
+          observeRpcEffect(WS_METHODS.hubList, workspaceHub.list(input)),
+        [WS_METHODS.hubGet]: (input) =>
+          observeRpcEffect(WS_METHODS.hubGet, workspaceHub.get(input)),
+        [WS_METHODS.hubSave]: (input) =>
+          observeRpcEffect(WS_METHODS.hubSave, workspaceHub.save(input)),
+        [WS_METHODS.hubExport]: () =>
+          observeRpcEffect(WS_METHODS.hubExport, workspaceHub.exportData()),
+        [WS_METHODS.timeTrackingList]: (input) =>
+          observeRpcEffect(WS_METHODS.timeTrackingList, timeTracking.list(input)),
+        [WS_METHODS.timeTrackingReport]: (input) =>
+          observeRpcEffect(WS_METHODS.timeTrackingReport, timeTracking.report(input)),
+        [WS_METHODS.timeTrackingMutate]: (input) =>
+          observeRpcEffect(WS_METHODS.timeTrackingMutate, timeTracking.mutate(input)),
         [ORCHESTRATION_WS_METHODS.dispatchCommand]: (command) =>
           observeRpcEffect(
             ORCHESTRATION_WS_METHODS.dispatchCommand,
@@ -2528,24 +2562,6 @@ const makeWsRpcLayer = (
             providerAuth.subscribe(input, currentSessionId),
             { "rpc.aggregate": "provider" },
           ),
-        [WS_METHODS.providerInstallStart]: (input) =>
-          observeRpcEffect(WS_METHODS.providerInstallStart, providerInstallation.start(input), {
-            "rpc.aggregate": "provider",
-          }),
-        [WS_METHODS.providerInstallCancel]: (input) =>
-          observeRpcEffect(WS_METHODS.providerInstallCancel, providerInstallation.cancel(input), {
-            "rpc.aggregate": "provider",
-          }),
-        [WS_METHODS.providerInstallSubscribe]: (input) =>
-          observeRpcStream(
-            WS_METHODS.providerInstallSubscribe,
-            providerInstallation.subscribe(input),
-            { "rpc.aggregate": "provider" },
-          ),
-        [WS_METHODS.providerInstallRemove]: (input) =>
-          observeRpcEffect(WS_METHODS.providerInstallRemove, providerInstallation.remove(input), {
-            "rpc.aggregate": "provider",
-          }),
         [WS_METHODS.serverUpdateServer]: (input) =>
           observeRpcEffect(WS_METHODS.serverUpdateServer, serverUpdate.update(input), {
             "rpc.aggregate": "server",

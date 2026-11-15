@@ -159,95 +159,6 @@ it.effect("launches an installed editor with platform-safe arguments", () =>
   }).pipe(Effect.scoped, Effect.provide(NodeServices.layer)),
 );
 
-for (const platform of ["darwin", "linux"] as const) {
-  it.effect.skipIf(windowsHost)(`launches Cursor in classic IDE mode on ${platform}`, () =>
-    Effect.gen(function* () {
-      const fileSystem = yield* FileSystem.FileSystem;
-      const path = yield* Path.Path;
-      const binDir = yield* fileSystem.makeTempDirectoryScoped({ prefix: "t3-editors-" });
-      const cursorPath = path.join(binDir, "cursor");
-      yield* fileSystem.writeFileString(cursorPath, "#!/bin/sh\n");
-      yield* fileSystem.chmod(cursorPath, 0o755);
-
-      const spawned: ChildProcess.StandardCommand[] = [];
-      yield* Effect.gen(function* () {
-        const launcher = yield* ExternalLauncher.ExternalLauncher;
-        for (const cwd of [
-          "/workspace with spaces",
-          "/workspace with spaces/src/index.ts",
-          "/workspace with spaces/src/index.ts:12",
-          "/workspace with spaces/src/index.ts:12:4",
-        ]) {
-          yield* launcher.launchEditor({ editor: "cursor", cwd });
-        }
-      }).pipe(
-        Effect.provide(
-          testLayer({
-            platform,
-            env: { PATH: binDir },
-            onSpawn: (command) => spawned.push(command),
-          }),
-        ),
-      );
-
-      assert.deepEqual(
-        spawned.map((command) => ({ command: command.command, args: command.args })),
-        [
-          { command: "cursor", args: ["--classic", "/workspace with spaces"] },
-          { command: "cursor", args: ["--classic", "/workspace with spaces/src/index.ts"] },
-          {
-            command: "cursor",
-            args: ["--classic", "--goto", "/workspace with spaces/src/index.ts:12"],
-          },
-          {
-            command: "cursor",
-            args: ["--classic", "--goto", "/workspace with spaces/src/index.ts:12:4"],
-          },
-        ],
-      );
-    }).pipe(Effect.scoped, Effect.provide(NodeServices.layer)),
-  );
-}
-
-it.effect("launches Cursor in classic IDE mode through the Windows command shim", () =>
-  Effect.gen(function* () {
-    const fileSystem = yield* FileSystem.FileSystem;
-    const path = yield* Path.Path;
-    const binDir = yield* fileSystem.makeTempDirectoryScoped({ prefix: "t3-editors-" });
-    yield* fileSystem.writeFileString(path.join(binDir, "cursor.CMD"), "@echo off\r\n");
-
-    let spawned: ChildProcess.StandardCommand | undefined;
-    yield* Effect.gen(function* () {
-      const launcher = yield* ExternalLauncher.ExternalLauncher;
-      yield* launcher.launchEditor({
-        editor: "cursor",
-        cwd: "C:\\workspace with spaces\\src\\index.ts:12:4",
-      });
-    }).pipe(
-      Effect.provide(
-        testLayer({
-          platform: "win32",
-          env: { PATH: binDir, PATHEXT: ".COM;.EXE;.BAT;.CMD" },
-          resolveExecutable: (command) =>
-            command === "cursor" ? "C:\\Program Files\\Cursor\\bin\\cursor.CMD" : command,
-          onSpawn: (command) => {
-            spawned = command;
-          },
-        }),
-      ),
-    );
-
-    assert.ok(spawned);
-    assert.equal(spawned.command, '^"C:\\Program^ Files\\Cursor\\bin\\cursor.CMD^"');
-    assert.deepEqual(spawned.args, [
-      '^"--classic^"',
-      '^"--goto^"',
-      '^"C:\\workspace^ with^ spaces\\src\\index.ts:12:4^"',
-    ]);
-    assert.equal(spawned.options.shell, true);
-  }).pipe(Effect.scoped, Effect.provide(NodeServices.layer)),
-);
-
 it.effect.skipIf(windowsHost)("reveals a file in Finder with open -R on macOS", () =>
   Effect.gen(function* () {
     const fileSystem = yield* FileSystem.FileSystem;
@@ -925,12 +836,6 @@ it.effect("discovers editors through the service API", () =>
 for (const { platform, installPath, editor, args } of [
   {
     platform: "darwin",
-    installPath: "Applications/Cursor.app/Contents/Resources/app/bin/code",
-    editor: "cursor",
-    args: ["--classic", "--goto", "/workspace with spaces/file.ts:12:4"],
-  },
-  {
-    platform: "darwin",
     installPath: "Applications/Kiro.app/Contents/Resources/app/bin/code",
     editor: "kiro",
     args: ["--goto", "/workspace with spaces/file.ts:12:4"],
@@ -946,12 +851,6 @@ for (const { platform, installPath, editor, args } of [
     installPath: "Applications/Zed.app/Contents/MacOS/cli",
     editor: "zed",
     args: ["/workspace with spaces/file.ts:12:4"],
-  },
-  {
-    platform: "win32",
-    installPath: "Programs/Cursor/resources/app/bin/cursor.cmd",
-    editor: "cursor",
-    args: ['^"--classic^"', '^"--goto^"', '^"/workspace^ with^ spaces/file.ts:12:4^"'],
   },
   {
     platform: "win32",
@@ -1033,7 +932,7 @@ it.effect.skipIf(windowsHost)("ignores unusable app bundles and keeps PATH launc
     const fs = yield* FileSystem.FileSystem;
     const path = yield* Path.Path;
     const home = yield* fs.makeTempDirectoryScoped({ prefix: "t3-editor-priority-" });
-    const executable = path.join(home, "Applications/Cursor.app/Contents/Resources/app/bin/code");
+    const executable = path.join(home, "Applications/Visual Studio Code.app/Contents/Resources/app/bin/code");
     const env = { HOME: home, PATH: path.join(home, "bin") };
     const discover = Effect.gen(function* () {
       const launcher = yield* ExternalLauncher.ExternalLauncher;
@@ -1054,12 +953,12 @@ it.effect.skipIf(windowsHost)("ignores unusable app bundles and keeps PATH launc
     );
     yield* fs.chmod(executable, 0o755);
     yield* fs.makeDirectory(env.PATH);
-    yield* fs.writeFileString(path.join(env.PATH, "cursor"), "#!/bin/sh\n");
-    yield* fs.chmod(path.join(env.PATH, "cursor"), 0o755);
+    yield* fs.writeFileString(path.join(env.PATH, "code"), "#!/bin/sh\n");
+    yield* fs.chmod(path.join(env.PATH, "code"), 0o755);
     let spawned: ChildProcess.StandardCommand | undefined;
     yield* Effect.gen(function* () {
       const launcher = yield* ExternalLauncher.ExternalLauncher;
-      yield* launcher.launchEditor({ editor: "cursor", cwd: "/workspace" });
+      yield* launcher.launchEditor({ editor: "vscode", cwd: "/workspace" });
     }).pipe(
       Effect.provide(
         testLayer({
@@ -1071,7 +970,7 @@ it.effect.skipIf(windowsHost)("ignores unusable app bundles and keeps PATH launc
         }),
       ),
     );
-    assert.equal(spawned?.command, "cursor");
+    assert.equal(spawned?.command, "code");
   }).pipe(Effect.scoped, Effect.provide(NodeServices.layer)),
 );
 

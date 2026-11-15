@@ -1,0 +1,238 @@
+.toolbox-layout {
+  display: flex;
+  flex: 1;
+  min-height: 0;
+  border-top: 1px solid var(--border);
+}
+.toolbox-tools {
+  width: 225px;
+  flex-shrink: 0;
+  border-right: 1px solid var(--border);
+  padding: 16px;
+  overflow: auto;
+}
+.toolbox-tools button {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  width: 100%;
+  text-align: left;
+  padding: 13px 12px;
+  border-radius: 8px;
+  margin-bottom: 6px;
+  cursor: pointer;
+}
+.toolbox-tools button:hover {
+  background: var(--accent);
+}
+.toolbox-tools button[aria-pressed="true"] {
+  background: color-mix(in oklab, var(--primary) 10%, transparent);
+  color: var(--primary);
+}
+.toolbox-tools button:disabled {
+  opacity: 0.5;
+  cursor: default;
+}
+.toolbox-tools button:focus-visible {
+  outline: 2px solid var(--ring);
+}
+.toolbox-tools strong {
+  display: block;
+  font-size: 12px;
+  font-weight: 550;
+}
+.toolbox-tools small {
+  display: block;
+  margin-top: 4px;
+  font-size: 10px;
+  color: var(--muted-foreground);
+}
+.toolbox-tools svg {
+  flex-shrink: 0;
+}
+.toolbox-content {
+  flex: 1;
+  min-width: 0;
+  padding: 28px;
+  overflow: auto;
+}
+.toolbox-content > h2 {
+  font-size: 22px;
+  font-weight: 550;
+  margin-bottom: 20px;
+  letter-spacing: -0.03em;
+}
+.toolbox-form {
+  max-width: 850px;
+}
+.toolbox-form:disabled {
+  opacity: 0.7;
+}
+.toolbox-picker {
+  padding: 24px;
+  border: 1px dashed var(--border);
+  border-radius: 12px;
+  background: color-mix(in oklab, var(--muted) 25%, var(--background));
+}
+.toolbox-picker > p:first-child {
+  font-size: 14px;
+  font-weight: 550;
+  margin-bottom: 6px;
+}
+.toolbox-picker input {
+  font-size: 12px;
+  max-width: 100%;
+  margin-top: 18px;
+}
+.toolbox-picker input::file-selector-button {
+  border: 1px solid var(--border);
+  padding: 7px 12px;
+  border-radius: 6px;
+  margin-right: 10px;
+  background: var(--background);
+  color: var(--foreground);
+  cursor: pointer;
+}
+.toolbox-settings {
+  display: grid;
+  gap: 16px;
+  margin-top: 22px;
+}
+.toolbox-settings > button {
+  justify-self: start;
+}
+.toolbox-file-list {
+  margin-top: 16px;
+  max-height: 260px;
+  overflow: auto;
+}
+.toolbox-file {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 10px 0;
+  border-bottom: 1px solid var(--border);
+}
+.toolbox-file > span {
+  flex: 1;
+  min-width: 0;
+}
+.toolbox-file strong {
+  display: block;
+  font-size: 12px;
+  font-weight: 500;
+  overflow-wrap: anywhere;
+}
+.toolbox-file small {
+  display: block;
+  font-size: 10px;
+  color: var(--muted-foreground);
+  margin-top: 4px;
+}
+.toolbox-file > input {
+  width: 120px;
+}
+.toolbox-output {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  margin: 24px 0;
+  padding: 20px;
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  max-width: 850px;
+  background: color-mix(in oklab, var(--primary) 5%, var(--background));
+}
+.toolbox-output strong {
+  display: block;
+  font-size: 13px;
+  overflow-wrap: anywhere;
+}
+.toolbox-output p {
+  font-size: 11px;
+  color: var(--muted-foreground);
+  margin-top: 6px;
+}
+.toolbox-status {
+  margin-top: 20px;
+  font-size: 12px;
+}
+.toolbox-image-preview {
+  display: flex;
+  gap: 16px;
+  flex-wrap: wrap;
+  margin-top: 24px;
+}
+.toolbox-image-preview figure {
+  flex: 1;
+  min-width: 160px;
+  max-width: 400px;
+}
+.toolbox-image-preview img {
+  max-width: 100%;
+  max-height: 260px;
+  object-fit: contain;
+  background: var(--muted);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+}
+.toolbox-image-preview figcaption {
+  font-size: 11px;
+  color: var(--muted-foreground);
+  margin-top: 8px;
+}
+.toolbox-table {
+  max-height: 350px;
+  overflow: auto;
+  margin-top: 18px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+}
+.toolbox-table table {
+  width: 100%;
+  font-size: 12px;
+  border-collapse: collapse;
+}
+.toolbox-table td,
+.toolbox-table th {
+  text-align: left;
+  border: 1px solid var(--border);
+  padding: 9px 12px;
+  white-space: pre-wrap;
+  min-width: 100px;
+  max-width: 400px;
+  overflow-wrap: anywhere;
+}
+.toolbox-text-result {
+  margin-top: 24px;
+}
+@media (max-width: 800px) {
+  .toolbox-layout {
+    flex-direction: column;
+  }
+  .toolbox-tools {
+    display: flex;
+    width: auto;
+    border-right: 0;
+    border-bottom: 1px solid var(--border);
+    padding: 8px;
+    flex-shrink: 0;
+  }
+  .toolbox-tools button {
+    flex-shrink: 0;
+    width: auto;
+  }
+  .toolbox-tools small {
+    display: none;
+  }
+  .toolbox-content {
+    padding: 18px;
+  }
+  .toolbox-file {
+    flex-wrap: wrap;
+  }
+  .toolbox-output {
+    flex-wrap: wrap;
+  }
+}

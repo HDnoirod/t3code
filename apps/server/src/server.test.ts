@@ -34,7 +34,6 @@ import {
   type ProviderAuthState,
   ProviderDriverKind,
   ProviderInstanceId,
-  type ProviderInstallState,
   ProviderSetupError,
   ResolvedKeybindingRule,
   type ServerLifecycleStreamEvent,
@@ -136,10 +135,6 @@ import * as ModelManifest from "./provider/ModelManifest.ts";
 import * as ProviderService from "./provider/Services/ProviderService.ts";
 import { ProviderAuthService } from "./provider/Services/ProviderAuthService.ts";
 import { ProviderInstanceRegistry } from "./provider/Services/ProviderInstanceRegistry.ts";
-import {
-  AntigravityInstallation,
-  AntigravityInstallationError,
-} from "./provider/AntigravityInstallation.ts";
 import type { ProviderInstance } from "./provider/ProviderDriver.ts";
 import * as ProviderSessionDirectory from "./provider/Services/ProviderSessionDirectory.ts";
 import { ProviderAdapterRequestError } from "./provider/Errors.ts";
@@ -233,19 +228,8 @@ const defaultModelSelection = {
   model: "gpt-5-codex",
 } as const;
 
-const providerSetupInstanceId = ProviderInstanceId.make("antigravity-custom-profile");
-const providerSetupDriver = ProviderDriverKind.make("antigravity");
-const providerSetupInstallState: ProviderInstallState = {
-  driver: providerSetupDriver,
-  operationId: "install-operation",
-  phase: "downloading",
-  downloadedBytes: 128,
-  totalBytes: 256,
-  version: "test-release",
-  installedVersion: null,
-  canRemove: false,
-  message: null,
-};
+const providerSetupInstanceId = ProviderInstanceId.make("opencode-custom-profile");
+const providerSetupDriver = ProviderDriverKind.make("opencode");
 const providerSetupAuthState: ProviderAuthState = {
   instanceId: providerSetupInstanceId,
   phase: "idle",
@@ -526,7 +510,6 @@ const buildAppUnderTest = (options?: {
     providerService?: Partial<ProviderService.ProviderService["Service"]>;
     providerAuth?: Partial<ProviderAuthService["Service"]>;
     providerInstanceRegistry?: Partial<ProviderInstanceRegistry["Service"]>;
-    antigravityInstallation?: Partial<AntigravityInstallation["Service"]>;
     serverSettings?: Partial<ServerSettings.ServerSettingsService["Service"]>;
     externalLauncher?: Partial<ExternalLauncher.ExternalLauncher["Service"]>;
     vcsDriver?: Partial<VcsDriver.VcsDriver["Service"]>;
@@ -824,10 +807,6 @@ const buildAppUnderTest = (options?: {
             getInstance: () => Effect.succeed(undefined),
             listInstances: Effect.succeed([]),
             ...options?.layers?.providerInstanceRegistry,
-          }),
-          Layer.mock(AntigravityInstallation)({
-            managedDirectory: "unused-test-antigravity-runtime",
-            ...options?.layers?.antigravityInstallation,
           }),
           Layer.mock(ProviderSessionDirectory.ProviderSessionDirectory)({
             upsert: () => Effect.void,
@@ -5972,82 +5951,6 @@ it.layer(NodeServices.layer)("server router seam", (it) => {
     }).pipe(Effect.provide(NodeHttpServer.layerTest)),
   );
 
-  it.effect("provider setup lets read-only clients observe installation but not change setup", () =>
-    Effect.gen(function* () {
-      let installStarts = 0;
-      let authCalls = 0;
-      yield* buildAppUnderTest({
-        layers: {
-          providerInstanceRegistry: {
-            getInstance: (instanceId) =>
-              Effect.succeed(
-                instanceId === providerSetupInstanceId ? providerSetupInstance : undefined,
-              ),
-          },
-          antigravityInstallation: {
-            start: Effect.sync(() => {
-              installStarts += 1;
-              return providerSetupInstallState;
-            }),
-            changes: Stream.succeed(providerSetupInstallState),
-          },
-          providerAuth: {
-            start: () =>
-              Effect.sync(() => {
-                authCalls += 1;
-                return providerSetupAuthState;
-              }),
-            subscribe: () =>
-              Stream.fromEffect(
-                Effect.sync(() => {
-                  authCalls += 1;
-                  return providerSetupAuthState;
-                }),
-              ),
-          },
-        },
-      });
-      const token = yield* exchangeAccessToken(defaultDesktopBootstrapToken, {
-        scope: "orchestration:read",
-      });
-      assert.equal(token.response.status, 200);
-      const ticketResponse = yield* HttpClient.post("/api/auth/websocket-ticket", {
-        headers: { authorization: `Bearer ${token.body.access_token ?? ""}` },
-      });
-      const { ticket } = yield* responseJsonEffect<{ readonly ticket: string }>(ticketResponse);
-      const wsUrl = `${yield* getWsServerUrl("/ws", { authenticated: false })}?wsTicket=${encodeURIComponent(ticket)}`;
-      yield* Effect.scoped(
-        withWsRpcClient(wsUrl, (client) =>
-          Effect.gen(function* () {
-            const observed = yield* client[WS_METHODS.providerInstallSubscribe]({
-              instanceId: providerSetupInstanceId,
-            }).pipe(Stream.runHead, Effect.map(Option.getOrThrow));
-            assert.deepEqual(observed, providerSetupInstallState);
-            const errors = [
-              yield* client[WS_METHODS.providerInstallStart]({
-                instanceId: providerSetupInstanceId,
-              }).pipe(Effect.flip),
-              yield* client[WS_METHODS.providerAuthStart]({
-                instanceId: providerSetupInstanceId,
-              }).pipe(Effect.flip),
-              yield* client[WS_METHODS.providerAuthSubscribe]({
-                instanceId: providerSetupInstanceId,
-              }).pipe(Stream.runHead, Effect.flip),
-            ];
-            for (const error of errors) {
-              assert.equal(error._tag, "EnvironmentAuthorizationError");
-              if (error._tag === "EnvironmentAuthorizationError") {
-                assert.equal(error.requiredScope, "orchestration:operate");
-              }
-            }
-          }),
-        ),
-      );
-      assert.equal(installStarts, 0);
-      assert.equal(authCalls, 0);
-    }).pipe(Effect.provide(NodeHttpServer.layerTest)),
-  );
-
   it.effect("provider setup binds private sign-in to the authenticated websocket session", () =>
     Effect.gen(function* () {
       const flowId = "private-sign-in-flow";
@@ -6195,82 +6098,6 @@ it.layer(NodeServices.layer)("server router seam", (it) => {
         [firstOwner, firstOwner, secondOwner, secondOwner, firstOwner, firstOwner],
       );
     }).pipe(Effect.provide(NodeHttpServer.layerTest)),
-  );
-
-  it.effect(
-    "provider setup routes installation operations and returns only safe typed errors",
-    () =>
-      Effect.gen(function* () {
-        const calls: string[] = [];
-        let state = providerSetupInstallState;
-        yield* buildAppUnderTest({
-          layers: {
-            providerInstanceRegistry: {
-              getInstance: (instanceId) =>
-                Effect.succeed(
-                  instanceId === providerSetupInstanceId ? providerSetupInstance : undefined,
-                ),
-            },
-            antigravityInstallation: {
-              start: Effect.sync(() => {
-                calls.push("start");
-                return state;
-              }),
-              cancel: (operationId) =>
-                Effect.gen(function* () {
-                  calls.push(`cancel:${operationId}`);
-                  if (operationId !== state.operationId) {
-                    return yield* new AntigravityInstallationError({
-                      operation: "cancel",
-                      detail: "This installation is no longer running.",
-                      cause: new Error("Private download diagnostics."),
-                    });
-                  }
-                  state = { ...state, phase: "cancelled" };
-                  return state;
-                }),
-              changes: Stream.fromEffect(Effect.sync(() => state)),
-            },
-          },
-        });
-        const wsUrl = yield* getWsServerUrl("/ws");
-        yield* Effect.scoped(
-          withWsRpcClient(wsUrl, (client) =>
-            Effect.gen(function* () {
-              const unknownInstance = yield* client[WS_METHODS.providerInstallStart]({
-                instanceId: ProviderInstanceId.make("unknown-instance"),
-              }).pipe(Effect.flip);
-              assert.equal(unknownInstance._tag, "ProviderSetupError");
-              assert.deepEqual(calls, []);
-              const started = yield* client[WS_METHODS.providerInstallStart]({
-                instanceId: providerSetupInstanceId,
-              });
-              assert.deepEqual(started, providerSetupInstallState);
-              const stale = yield* client[WS_METHODS.providerInstallCancel]({
-                instanceId: providerSetupInstanceId,
-                operationId: "old-operation",
-              }).pipe(Effect.flip);
-              assert.equal(stale._tag, "ProviderSetupError");
-              if (stale._tag === "ProviderSetupError") {
-                assert.equal(stale.instanceId, providerSetupInstanceId);
-                assert.equal(stale.operation, "cancel");
-                assert.equal(stale.detail, "This installation is no longer running.");
-                assert.notProperty(stale, "cause");
-              }
-              const cancelled = yield* client[WS_METHODS.providerInstallCancel]({
-                instanceId: providerSetupInstanceId,
-                operationId: "install-operation",
-              });
-              assert.equal(cancelled.phase, "cancelled");
-              const observed = yield* client[WS_METHODS.providerInstallSubscribe]({
-                instanceId: providerSetupInstanceId,
-              }).pipe(Stream.runHead, Effect.map(Option.getOrThrow));
-              assert.deepEqual(observed, cancelled);
-            }),
-          ),
-        );
-        assert.deepEqual(calls, ["start", "cancel:old-operation", "cancel:install-operation"]);
-      }).pipe(Effect.provide(NodeHttpServer.layerTest)),
   );
 
   it.effect("routes websocket rpc subscribeServerConfig streams snapshot then update", () =>
@@ -7715,20 +7542,20 @@ it.layer(NodeServices.layer)("server router seam", (it) => {
         withWsRpcClient(wsUrl, (client) =>
           client[WS_METHODS.shellOpenInEditor]({
             cwd: "/tmp/project",
-            editor: "cursor",
+            editor: "vscode",
           }),
         ),
       );
 
-      assert.deepEqual(openedInput, { cwd: "/tmp/project", editor: "cursor" });
+      assert.deepEqual(openedInput, { cwd: "/tmp/project", editor: "vscode" });
     }).pipe(Effect.provide(NodeHttpServer.layerTest)),
   );
 
   it.effect("routes websocket rpc shell.openInEditor errors", () =>
     Effect.gen(function* () {
       const externalLauncherError = new ExternalLauncherCommandNotFoundError({
-        editor: "cursor",
-        command: "cursor",
+        editor: "vscode",
+        command: "code",
       });
       yield* buildAppUnderTest({
         layers: {
@@ -7743,7 +7570,7 @@ it.layer(NodeServices.layer)("server router seam", (it) => {
         withWsRpcClient(wsUrl, (client) =>
           client[WS_METHODS.shellOpenInEditor]({
             cwd: "/tmp/project",
-            editor: "cursor",
+            editor: "vscode",
           }),
         ).pipe(Effect.result),
       );

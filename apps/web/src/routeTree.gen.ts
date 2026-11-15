@@ -11,9 +11,13 @@
 import { Route as rootRouteImport } from './routes/__root'
 import { Route as WelcomeRouteImport } from './routes/welcome'
 import { Route as UsageRouteImport } from './routes/usage'
+import { Route as ToolboxRouteImport } from './routes/toolbox'
 import { Route as SettingsRouteImport } from './routes/settings'
 import { Route as PairRouteImport } from './routes/pair'
+import { Route as NotesRouteImport } from './routes/notes'
+import { Route as HubRouteImport } from './routes/hub'
 import { Route as ConnectRouteImport } from './routes/connect'
+import { Route as CalendarRouteImport } from './routes/calendar'
 import { Route as ChatRouteImport } from './routes/_chat'
 import { Route as ChatIndexRouteImport } from './routes/_chat.index'
 import { Route as SettingsStorageRouteImport } from './routes/settings.storage'
@@ -44,6 +48,11 @@ const UsageRoute = UsageRouteImport.update({
   path: '/usage',
   getParentRoute: () => rootRouteImport,
 } as any)
+const ToolboxRoute = ToolboxRouteImport.update({
+  id: '/toolbox',
+  path: '/toolbox',
+  getParentRoute: () => rootRouteImport,
+} as any)
 const SettingsRoute = SettingsRouteImport.update({
   id: '/settings',
   path: '/settings',
@@ -54,9 +63,24 @@ const PairRoute = PairRouteImport.update({
   path: '/pair',
   getParentRoute: () => rootRouteImport,
 } as any)
+const NotesRoute = NotesRouteImport.update({
+  id: '/notes',
+  path: '/notes',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const HubRoute = HubRouteImport.update({
+  id: '/hub',
+  path: '/hub',
+  getParentRoute: () => rootRouteImport,
+} as any)
 const ConnectRoute = ConnectRouteImport.update({
   id: '/connect',
   path: '/connect',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const CalendarRoute = CalendarRouteImport.update({
+  id: '/calendar',
+  path: '/calendar',
   getParentRoute: () => rootRouteImport,
 } as any)
 const ChatRoute = ChatRouteImport.update({
@@ -158,9 +182,13 @@ const ChatEnvironmentIdThreadIdRoute =
 
 export interface FileRoutesByFullPath {
   '/': typeof ChatIndexRoute
+  '/calendar': typeof CalendarRoute
   '/connect': typeof ConnectRoute
+  '/hub': typeof HubRoute
+  '/notes': typeof NotesRoute
   '/pair': typeof PairRoute
   '/settings': typeof SettingsRouteWithChildren
+  '/toolbox': typeof ToolboxRoute
   '/usage': typeof UsageRoute
   '/welcome': typeof WelcomeRoute
   '/pull-requests': typeof ChatPullRequestsRoute
@@ -182,9 +210,13 @@ export interface FileRoutesByFullPath {
   '/draft/$draftId': typeof ChatDraftDraftIdRoute
 }
 export interface FileRoutesByTo {
+  '/calendar': typeof CalendarRoute
   '/connect': typeof ConnectRoute
+  '/hub': typeof HubRoute
+  '/notes': typeof NotesRoute
   '/pair': typeof PairRoute
   '/settings': typeof SettingsRouteWithChildren
+  '/toolbox': typeof ToolboxRoute
   '/usage': typeof UsageRoute
   '/welcome': typeof WelcomeRoute
   '/pull-requests': typeof ChatPullRequestsRoute
@@ -209,9 +241,13 @@ export interface FileRoutesByTo {
 export interface FileRoutesById {
   __root__: typeof rootRouteImport
   '/_chat': typeof ChatRouteWithChildren
+  '/calendar': typeof CalendarRoute
   '/connect': typeof ConnectRoute
+  '/hub': typeof HubRoute
+  '/notes': typeof NotesRoute
   '/pair': typeof PairRoute
   '/settings': typeof SettingsRouteWithChildren
+  '/toolbox': typeof ToolboxRoute
   '/usage': typeof UsageRoute
   '/welcome': typeof WelcomeRoute
   '/_chat/pull-requests': typeof ChatPullRequestsRoute
@@ -237,9 +273,13 @@ export interface FileRouteTypes {
   fileRoutesByFullPath: FileRoutesByFullPath
   fullPaths:
     | '/'
+    | '/calendar'
     | '/connect'
+    | '/hub'
+    | '/notes'
     | '/pair'
     | '/settings'
+    | '/toolbox'
     | '/usage'
     | '/welcome'
     | '/pull-requests'
@@ -261,9 +301,13 @@ export interface FileRouteTypes {
     | '/draft/$draftId'
   fileRoutesByTo: FileRoutesByTo
   to:
+    | '/calendar'
     | '/connect'
+    | '/hub'
+    | '/notes'
     | '/pair'
     | '/settings'
+    | '/toolbox'
     | '/usage'
     | '/welcome'
     | '/pull-requests'
@@ -287,9 +331,13 @@ export interface FileRouteTypes {
   id:
     | '__root__'
     | '/_chat'
+    | '/calendar'
     | '/connect'
+    | '/hub'
+    | '/notes'
     | '/pair'
     | '/settings'
+    | '/toolbox'
     | '/usage'
     | '/welcome'
     | '/_chat/pull-requests'
@@ -314,9 +362,13 @@ export interface FileRouteTypes {
 }
 export interface RootRouteChildren {
   ChatRoute: typeof ChatRouteWithChildren
+  CalendarRoute: typeof CalendarRoute
   ConnectRoute: typeof ConnectRoute
+  HubRoute: typeof HubRoute
+  NotesRoute: typeof NotesRoute
   PairRoute: typeof PairRoute
   SettingsRoute: typeof SettingsRouteWithChildren
+  ToolboxRoute: typeof ToolboxRoute
   UsageRoute: typeof UsageRoute
   WelcomeRoute: typeof WelcomeRoute
   ProjectsProjectKeyRoute: typeof ProjectsProjectKeyRoute
@@ -338,6 +390,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof UsageRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/toolbox': {
+      id: '/toolbox'
+      path: '/toolbox'
+      fullPath: '/toolbox'
+      preLoaderRoute: typeof ToolboxRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/settings': {
       id: '/settings'
       path: '/settings'
@@ -352,11 +411,32 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof PairRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/notes': {
+      id: '/notes'
+      path: '/notes'
+      fullPath: '/notes'
+      preLoaderRoute: typeof NotesRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/hub': {
+      id: '/hub'
+      path: '/hub'
+      fullPath: '/hub'
+      preLoaderRoute: typeof HubRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/connect': {
       id: '/connect'
       path: '/connect'
       fullPath: '/connect'
       preLoaderRoute: typeof ConnectRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/calendar': {
+      id: '/calendar'
+      path: '/calendar'
+      fullPath: '/calendar'
+      preLoaderRoute: typeof CalendarRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/_chat': {
@@ -549,9 +629,13 @@ const SettingsRouteWithChildren = SettingsRoute._addFileChildren(
 
 const rootRouteChildren: RootRouteChildren = {
   ChatRoute: ChatRouteWithChildren,
+  CalendarRoute: CalendarRoute,
   ConnectRoute: ConnectRoute,
+  HubRoute: HubRoute,
+  NotesRoute: NotesRoute,
   PairRoute: PairRoute,
   SettingsRoute: SettingsRouteWithChildren,
+  ToolboxRoute: ToolboxRoute,
   UsageRoute: UsageRoute,
   WelcomeRoute: WelcomeRoute,
   ProjectsProjectKeyRoute: ProjectsProjectKeyRoute,

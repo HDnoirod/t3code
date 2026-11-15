@@ -987,7 +987,7 @@ function normalizeProviderModelOptions(
 ): ProviderOptionSelectionsByProvider | null {
   const candidate = value && typeof value === "object" ? (value as Record<string, unknown>) : null;
   const result: ProviderOptionSelectionsByProvider = {};
-  for (const providerKey of ["codex", "claudeAgent", "cursor", "opencode"] as const) {
+  for (const providerKey of ["codex", "claudeAgent", "opencode"] as const) {
     const selections = coerceProviderOptionSelections(candidate?.[providerKey]);
     if (selections) {
       result[providerKey] = selections;
@@ -1146,7 +1146,7 @@ function legacyToModelSelectionByProvider(
 ): Partial<Record<ProviderInstanceId, ModelSelection>> {
   const result: Partial<Record<ProviderInstanceId, ModelSelection>> = {};
   if (modelOptions) {
-    for (const provider of ["codex", "claudeAgent", "cursor", "opencode"] as const) {
+    for (const provider of ["codex", "claudeAgent", "opencode"] as const) {
       const options = modelOptions[provider];
       if (options && options.length > 0) {
         const driverKind = ProviderDriverKind.make(provider);
@@ -1202,8 +1202,6 @@ export function deriveEffectiveComposerModelState(input: {
           { preserveUnavailableSelection: preserveThreadModel },
         )
       : null) ??
-    // Antigravity has no static model or cross-account catalog fallback.
-    (input.selectedProvider === "antigravity" && input.selectedInstanceId ? "" : null) ??
     resolveAppModelSelection(
       input.selectedProvider,
       input.settings,
@@ -1220,11 +1218,7 @@ export function deriveEffectiveComposerModelState(input: {
     ? input.draft?.modelSelectionByProvider?.[input.selectedInstanceId]
     : undefined;
   const legacySelection =
-    input.selectedProvider === "antigravity" &&
-    input.selectedInstanceId &&
-    input.selectedInstanceId !== defaultInstanceIdForDriver(input.selectedProvider)
-      ? undefined
-      : input.draft?.modelSelectionByProvider?.[ProviderInstanceId.make(input.selectedProvider)];
+    input.draft?.modelSelectionByProvider?.[ProviderInstanceId.make(input.selectedProvider)];
   const activeSelection = instanceSelection ?? legacySelection;
   const activeSelectionInstanceId = instanceSelection
     ? (input.selectedInstanceId ?? ProviderInstanceId.make(input.selectedProvider))
@@ -1237,7 +1231,6 @@ export function deriveEffectiveComposerModelState(input: {
         activeSelection.model,
         { preserveUnavailableSelection: true },
       ) ??
-      (input.selectedProvider === "antigravity" ? "" : null) ??
       resolveAppModelSelection(
         input.selectedProvider,
         input.settings,
@@ -3103,7 +3096,7 @@ const composerDraftStore = create<ComposerDraftStoreState>()(
             }
             const base = existing ?? createEmptyThreadDraft();
             const nextMap = { ...base.modelSelectionByProvider };
-            for (const provider of ["codex", "claudeAgent", "cursor", "opencode"] as const) {
+            for (const provider of ["codex", "claudeAgent", "opencode"] as const) {
               if (!modelOptions || !(provider in modelOptions)) continue;
               const opts = modelOptions[provider];
               const driverKind = ProviderDriverKind.make(provider);

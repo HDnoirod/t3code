@@ -34,6 +34,8 @@ import { environmentServerConfigsAtom } from "../state/server";
 import { resolveThreadRouteTarget } from "../threadRoutes";
 import { legacyProjectCwdPreferenceKey, useUiStateStore } from "../uiStateStore";
 import { useClientSettings } from "./useSettings";
+import { readHubChatDefault } from "../lib/hubChatDefaults";
+import { toastManager } from "../components/ui/toast";
 
 interface NewThreadWorkspaceOptions {
   branch?: string | null;
@@ -64,7 +66,7 @@ export function useNewThreadHandler() {
   }, [router]);
 
   return useCallback(
-    (
+    async (
       projectRef: ScopedProjectRef,
       options?: {
         branch?: string | null;
@@ -77,6 +79,22 @@ export function useNewThreadHandler() {
       // prepared checkout, a task to write — addresses that one rather than looking the project
       // up again and finding whichever draft it happens to hold.
     ): Promise<{ draftId: DraftId; threadId: ThreadId } | null> => {
+      const requestHref = router.state.location.href;
+      const targetConfig = environmentServerConfigs.get(projectRef.environmentId);
+      let clientDefault = null;
+      if (targetConfig?.hubChatDefaults) {
+        try {
+          clientDefault = await readHubChatDefault(projectRef);
+        } catch (cause) {
+          toastManager.add({
+            type: "error",
+            title: "Could not choose the default AI account",
+            description: cause instanceof Error ? cause.message : "Try again.",
+          });
+          return null;
+        }
+        if (router.state.location.href !== requestHref) return null;
+      }
       const projects = readProjects();
       const targetServerSettings =
         environmentServerConfigs.get(projectRef.environmentId)?.settings ?? DEFAULT_SERVER_SETTINGS;
@@ -135,7 +153,8 @@ export function useNewThreadHandler() {
         project?.id ?? null,
         project,
       );
-      const projectDefaultModelSelection = projectSettings.settings.defaultModelSelection;
+      const projectDefaultModelSelection =
+        clientDefault ?? projectSettings.settings.defaultModelSelection;
       const defaultRuntimeMode = projectSettings.settings.defaultRuntimeMode;
       const resolveModelSelectionOverride = (destinationDraftId: DraftId) =>
         resolveNewThreadModelSelectionOverride({

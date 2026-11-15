@@ -2,6 +2,7 @@
 import * as NodeFS from "node:fs";
 import * as NodeOS from "node:os";
 import * as NodePath from "node:path";
+import { makeWorkspaceHubStore } from "../../persistence/WorkspaceHub.ts";
 
 import {
   ModelSelection,
@@ -167,6 +168,7 @@ describe("ProviderCommandReactor", () => {
   });
 
   async function createHarness(input?: {
+    readonly onSendTurn?: () => Effect.Effect<void>;
     readonly baseDir?: string;
     readonly initialTitle?: string;
     readonly deferReactorStart?: boolean;
@@ -270,7 +272,7 @@ describe("ProviderCommandReactor", () => {
       Effect.succeed({
         threadId: ThreadId.make("thread-1"),
         turnId: asTurnId("turn-1"),
-      }),
+      }).pipe(Effect.tap(() => input?.onSendTurn?.() ?? Effect.void)),
     );
     const compactThread = vi.fn((_: ThreadId) => input?.compactThreadEffect?.() ?? Effect.void);
     const interruptTurn = vi.fn((_: unknown) => input?.interruptTurnEffect?.() ?? Effect.void);
@@ -376,8 +378,8 @@ describe("ProviderCommandReactor", () => {
             ? "claudeAgent"
             : raw.startsWith("codex")
               ? "codex"
-              : raw.startsWith("antigravity")
-                ? "antigravity"
+              : raw.startsWith("opencode")
+                ? "opencode"
                 : raw,
         );
         return Effect.succeed({
@@ -596,6 +598,7 @@ describe("ProviderCommandReactor", () => {
     const drain = () => Effect.runPromise(reactor.drain);
 
     return {
+      hub: await runtime.runPromise(makeWorkspaceHubStore),
       engine,
       snapshotQuery,
       readModel: () => Effect.runPromise(snapshotQuery.getSnapshot()),
@@ -639,7 +642,7 @@ describe("ProviderCommandReactor", () => {
     "handles sign-out for a %s thread before worktree repair, text helpers, or startup",
     (sessionStatus) =>
       Effect.gen(function* () {
-        const instanceId = ProviderInstanceId.make("antigravity-personal");
+        const instanceId = ProviderInstanceId.make("opencode-personal");
         const handled = yield* Deferred.make<void>();
         const harness = yield* Effect.promise(() =>
           createHarness({
@@ -662,7 +665,7 @@ describe("ProviderCommandReactor", () => {
             session: {
               threadId,
               providerInstanceId: instanceId,
-              providerName: "antigravity",
+              providerName: "opencode",
               status: sessionStatus,
               runtimeMode: "approval-required",
               activeTurnId: null,
@@ -693,7 +696,7 @@ describe("ProviderCommandReactor", () => {
           },
           modelSelection: {
             instanceId:
-              sessionStatus === "new" ? instanceId : ProviderInstanceId.make("antigravity-other"),
+              sessionStatus === "new" ? instanceId : ProviderInstanceId.make("opencode-other"),
             model: "gemini-3.1-pro",
           },
           interactionMode: DEFAULT_PROVIDER_INTERACTION_MODE,
@@ -708,7 +711,7 @@ describe("ProviderCommandReactor", () => {
         );
         expect(thread?.session).toMatchObject({
           status: "stopped",
-          providerName: "antigravity",
+          providerName: "opencode",
           providerInstanceId: instanceId,
           activeTurnId: null,
           lastError: null,
@@ -734,7 +737,7 @@ describe("ProviderCommandReactor", () => {
 
   effectIt.effect("clears a failed sign-out request without sending it as a prompt", () =>
     Effect.gen(function* () {
-      const instanceId = ProviderInstanceId.make("antigravity-personal");
+      const instanceId = ProviderInstanceId.make("opencode-personal");
       const handled = yield* Deferred.make<void>();
       const harness = yield* Effect.promise(() =>
         createHarness({
@@ -792,6 +795,93 @@ describe("ProviderCommandReactor", () => {
     }),
   );
 
+  effectIt.effect.each(["codex", "claude", "opencode"])(
+    "includes selected project notes and folders in %s requests without rewriting the transcript",
+    (instanceId) =>
+      Effect.gen(function* () {
+        const sent = yield* Deferred.make<void>();
+        const harness = yield* Effect.promise(() =>
+          createHarness({
+            threadModelSelection: {
+              instanceId: ProviderInstanceId.make(instanceId),
+              model: "test-model",
+            },
+            onSendTurn: () => Deferred.succeed(sent, undefined).pipe(Effect.asVoid),
+          }),
+        );
+        const base = {
+          title: "Project",
+          body: "Project brief",
+          contacts: "",
+          resources: [],
+          clientIds: [],
+          projectIds: [],
+          workspaceIds: [],
+          threadIds: [],
+          relatedIds: [],
+          tags: [],
+          folder: "",
+          pinned: true,
+          archived: false,
+          status: "active" as const,
+          priority: "normal" as const,
+          dueDate: null,
+          version: 0,
+        };
+        yield* harness.hub.save({ ...base, id: "hub", kind: "project", chatIds: ["thread-1"] });
+        yield* harness.hub.save({
+          ...base,
+          id: "note",
+          kind: "note",
+          title: "Preferences",
+          projectIds: ["hub"],
+          aiContext: true,
+          body: "Use metric dimensions.",
+        });
+        yield* harness.hub.save({
+          ...base,
+          id: "private",
+          kind: "note",
+          projectIds: ["hub"],
+          body: "PRIVATE NOTES",
+        });
+        yield* harness.engine.dispatch({
+          type: "thread.turn.start",
+          commandId: CommandId.make("hub-turn"),
+          threadId: ThreadId.make("thread-1"),
+          message: {
+            messageId: MessageId.make("hub-message"),
+            role: "user",
+            text: "Plan the design.",
+            attachments: [],
+          },
+          interactionMode: DEFAULT_PROVIDER_INTERACTION_MODE,
+          runtimeMode: "approval-required",
+          createdAt: "2026-01-01T00:00:00.000Z",
+        });
+        yield* Deferred.await(sent);
+        yield* Effect.promise(() => harness.drain());
+        expect(harness.sendTurn).toHaveBeenCalledWith(
+          expect.objectContaining({ input: expect.stringContaining("Use metric dimensions.") }),
+        );
+        expect(harness.sendTurn).toHaveBeenCalledWith(
+          expect.objectContaining({ input: expect.stringContaining("Plan the design.") }),
+        );
+        expect(harness.sendTurn).toHaveBeenCalledWith(
+          expect.objectContaining({ input: expect.stringContaining("/tmp/provider-project") }),
+        );
+        expect(harness.sendTurn).not.toHaveBeenCalledWith(
+          expect.objectContaining({ input: expect.stringContaining("PRIVATE NOTES") }),
+        );
+        const thread = (yield* Effect.promise(() => harness.readModel())).threads.find(
+          (value) => value.id === "thread-1",
+        );
+        expect(thread?.messages.find((message) => message.role === "user")?.text).toBe(
+          "Plan the design.",
+        );
+      }),
+  );
+
   effectIt.effect.each([
     { label: "a command mention", text: "What does /logout do?", attachments: [] },
     {
@@ -842,7 +932,7 @@ describe("ProviderCommandReactor", () => {
       });
       expect(harness.sendTurn).toHaveBeenCalledWith(
         expect.objectContaining({
-          input: text,
+          input: expect.stringContaining(text),
           ...(attachments.length > 0 ? { attachments } : {}),
         }),
       );
@@ -968,7 +1058,7 @@ describe("ProviderCommandReactor", () => {
       expect(session.threadId).toBe(ThreadId.make("thread-1"));
       expect(harness.sendTurn.mock.calls[0]?.[0]).toMatchObject({
         threadId: ThreadId.make("thread-1"),
-        input: "Start after activation",
+        input: expect.stringContaining("Start after activation"),
       });
     }),
   );
@@ -1007,7 +1097,7 @@ describe("ProviderCommandReactor", () => {
       yield* Effect.promise(() => harness.drain());
 
       expect(harness.sendTurn).toHaveBeenCalledWith(
-        expect.objectContaining({ input: "Use the current message" }),
+        expect.objectContaining({ input: expect.stringContaining("Use the current message") }),
       );
       expect(harness.generateThreadTitle).toHaveBeenCalledWith(
         expect.objectContaining({ message: "Use the current message" }),
@@ -1221,8 +1311,14 @@ describe("ProviderCommandReactor", () => {
         }
         yield* Deferred.await(queuedSent);
         expect(harness.sendTurn.mock.calls.slice(1).map(([request]) => request)).toEqual([
-          expect.objectContaining({ input: "first queued", interactionMode: "plan" }),
-          expect.objectContaining({ input: "second queued", interactionMode: "default" }),
+          expect.objectContaining({
+            input: expect.stringContaining("first queued"),
+            interactionMode: "plan",
+          }),
+          expect.objectContaining({
+            input: expect.stringContaining("second queued"),
+            interactionMode: "default",
+          }),
         ]);
         const afterRestore = (yield* Effect.promise(() => harness.readModel())).threads.find(
           (entry) => entry.id === threadId,
@@ -2533,7 +2629,9 @@ describe("ProviderCommandReactor", () => {
       thread?.messages.find((entry) => entry.id === asMessageId("user-message-title-formatted"))
         ?.text,
     ).toBe(prompt);
-    expect(harness.sendTurn.mock.calls[0]?.[0]).toMatchObject({ input: prompt });
+    expect(harness.sendTurn.mock.calls[0]?.[0]).toMatchObject({
+      input: expect.stringContaining(prompt),
+    });
   });
 
   it("generates a worktree branch name for the first turn", async () => {

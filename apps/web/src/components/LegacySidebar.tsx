@@ -1,3 +1,4 @@
+import { useHubProjects } from "./workspaceHub/useHubProjects";
 import { useSupportsMultiplePullRequests } from "~/hooks/useSupportsMultiplePullRequests";
 import { resolveThreadCurrentPullRequestLink } from "@t3tools/shared/threadPullRequests";
 import { Spinner } from "~/components/ui/spinner";
@@ -111,6 +112,7 @@ import { isModelPickerOpen } from "../modelPickerVisibility";
 import { useShortcutModifierState } from "../shortcutModifierState";
 import { ensureLocalApi, readLocalApi } from "../localApi";
 import { useComposerDraftStore } from "../composerDraftStore";
+import { useProjectChatHandler } from "../hooks/useProjectChatHandler";
 import { useNewThreadHandler } from "../hooks/useHandleNewThread";
 import { useDesktopUpdateState } from "../state/desktopUpdate";
 
@@ -1256,7 +1258,15 @@ const SidebarProjectItem = memo(function SidebarProjectItem(props: SidebarProjec
   // thread-list change).
   const sidebarThreadByKeyRef = useRef(sidebarThreadByKey);
   sidebarThreadByKeyRef.current = sidebarThreadByKey;
-  const projectThreads = sidebarThreads;
+  const { owners: hubChatOwners } = useHubProjects();
+  const projectThreads = useMemo(
+    () =>
+      sidebarThreads.filter(
+        (thread) =>
+          !hubChatOwners.has(scopedThreadKey(scopeThreadRef(thread.environmentId, thread.id))),
+      ),
+    [sidebarThreads, hubChatOwners],
+  );
   const projectPreferenceKeys = useMemo(() => projectExpansionPreferenceKeys(project), [project]);
   const projectExpanded = useUiStateStore((state) =>
     resolveProjectExpanded(state.projectExpandedById, projectPreferenceKeys),
@@ -2975,6 +2985,7 @@ const SidebarProjectsContent = memo(function SidebarProjectsContent(
         </SidebarGroup>
       }
     >
+      <HubSidebar />
       {showArm64IntelBuildWarning && arm64IntelBuildWarningDescription ? (
         <SidebarGroup>
           <Alert variant="warning">
@@ -3001,7 +3012,9 @@ const SidebarProjectsContent = memo(function SidebarProjectsContent(
       <LocalSecondaryStatus />
       <SidebarGroup>
         <div className="mb-1 flex items-center justify-between pl-2 pr-1.5">
-          <span className="text-xs font-medium text-sidebar-muted-foreground/80">Projects</span>
+          <span className="text-xs font-medium text-sidebar-muted-foreground/80">
+            Unassigned working folders
+          </span>
           <div className="flex items-center gap-1">
             <ProjectSortMenu
               projectSortOrder={projectSortOrder}
@@ -3017,7 +3030,7 @@ const SidebarProjectsContent = memo(function SidebarProjectsContent(
                   <Button
                     size="icon-xs"
                     variant="ghost-muted"
-                    aria-label="Add project"
+                    aria-label="Add working folder"
                     data-testid="sidebar-add-project-trigger"
                     onClick={openAddProject}
                   />
@@ -3025,7 +3038,7 @@ const SidebarProjectsContent = memo(function SidebarProjectsContent(
               >
                 <FolderPlusIcon className="size-3.5" />
               </TooltipTrigger>
-              <TooltipPopup side="right">Add project</TooltipPopup>
+              <TooltipPopup side="right">Add working folder</TooltipPopup>
             </Tooltip>
           </div>
         </div>
@@ -3125,7 +3138,7 @@ export default function LegacySidebar() {
   const projectGroupingSettings = useClientSettings(selectProjectGroupingSettings);
   const sidebarThreadPreviewCount = useClientSettings((s) => s.sidebarThreadPreviewCount);
   const updateSettings = useUpdateClientSettings();
-  const handleNewThread = useNewThreadHandler();
+  const { handleNewThread } = useProjectChatHandler();
   const { archiveThread, deleteThread } = useThreadActions();
   const { isMobile, setOpenMobile } = useSidebar();
   const routeTarget = useParams({
@@ -3401,11 +3414,34 @@ export default function LegacySidebar() {
     () => sidebarThreads.filter((thread) => thread.archivedAt === null),
     [sidebarThreads],
   );
+  const { projects: hubProjects, owners: hubChatOwners } = useHubProjects();
   const sortedProjects = useMemo(() => {
-    const sortableProjects = sidebarProjects.map((project) => ({
-      ...project,
-      id: project.projectKey,
-    }));
+    const sortableProjects = sidebarProjects
+      .filter((project) => {
+        const chats = threadsByProjectKey.get(project.projectKey) ?? [];
+        const linked =
+          hubProjects.some((hub) =>
+            project.memberProjects.some(
+              (member) =>
+                hub.environmentId === member.environmentId && hub.workspaceIds.includes(member.id),
+            ),
+          ) ||
+          chats.some((thread) =>
+            hubChatOwners.has(scopedThreadKey(scopeThreadRef(thread.environmentId, thread.id))),
+          );
+        return (
+          !linked ||
+          chats.some(
+            (thread) =>
+              !thread.archivedAt &&
+              !hubChatOwners.has(scopedThreadKey(scopeThreadRef(thread.environmentId, thread.id))),
+          )
+        );
+      })
+      .map((project) => ({
+        ...project,
+        id: project.projectKey,
+      }));
     const sortableThreads = visibleThreads.map((thread) => {
       const physicalKey =
         projectPhysicalKeyByScopedRef.get(
@@ -3425,6 +3461,9 @@ export default function LegacySidebar() {
       return resolvedProject ? [resolvedProject] : [];
     });
   }, [
+    hubProjects,
+    hubChatOwners,
+    threadsByProjectKey,
     sidebarProjectSortOrder,
     physicalToLogicalKey,
     projectPhysicalKeyByScopedRef,
@@ -3799,3 +3838,4 @@ export default function LegacySidebar() {
     </>
   );
 }
+import { HubSidebar } from "./workspaceHub/HubSidebar";

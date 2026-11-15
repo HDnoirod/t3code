@@ -1804,7 +1804,7 @@ describe("ProviderRuntimeIngestion", () => {
     harness.emit({
       type: "item.completed",
       eventId: asEventId("evt-tool-completed-with-data"),
-      provider: ProviderDriverKind.make("cursor"),
+      provider: ProviderDriverKind.make("opencode"),
       createdAt: now,
       threadId: asThreadId("thread-1"),
       turnId: asTurnId("turn-tool-completed"),
@@ -1860,7 +1860,7 @@ describe("ProviderRuntimeIngestion", () => {
     harness.emit({
       type: "item.completed",
       eventId: asEventId("evt-command-completed"),
-      provider: ProviderDriverKind.make("cursor"),
+      provider: ProviderDriverKind.make("opencode"),
       createdAt: now,
       threadId: asThreadId("thread-1"),
       turnId: asTurnId("turn-command-completed"),
@@ -1902,7 +1902,7 @@ describe("ProviderRuntimeIngestion", () => {
     harness.emit({
       type: "item.completed",
       eventId: asEventId("evt-read-path-completed"),
-      provider: ProviderDriverKind.make("cursor"),
+      provider: ProviderDriverKind.make("opencode"),
       createdAt: now,
       threadId: asThreadId("thread-1"),
       turnId: asTurnId("turn-read-path"),

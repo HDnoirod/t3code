@@ -1,8 +1,8 @@
 /**
  * UsageService - scans provider transcripts and returns priced usage buckets.
  *
- * The scan reads the provider CLIs' own session files (Claude Code, Codex, and
- * Grok Build) rather than T3 Code's orchestration projections, so usage covers
+ * The scan reads the provider CLIs' own session files (Claude Code and Codex)
+ * rather than T3 Code's orchestration projections, so usage covers
  * turns driven outside T3 Code too. This is the approach `ccusage` takes.
  *
  * Transcripts are append-only, so parsed records are memoised per file by
@@ -260,7 +260,7 @@ export const make = Effect.gen(function* () {
       fileName?: string;
     }> = [];
     const seen = new Set<string>();
-    for (const driver of ["claudeAgent", "codex", "grok"] as const) {
+    for (const driver of ["claudeAgent", "codex"] as const) {
       // Disabled accounts still have history. Explicit default slots replace
       // the legacy settings, just as they do in the provider registry.
       const instances: Array<Pick<ProviderInstanceConfig, "config" | "environment">> =
@@ -283,17 +283,13 @@ export const make = Effect.gen(function* () {
               : config,
           );
           home = layout.sharedHomePath;
-        } else if (driver === "claudeAgent") {
+        } else {
           const decoded = decodeClaudeSettings(instance.config ?? {});
           if (Option.isNone(decoded)) continue;
           const configured = decoded.value.homePath.trim();
           home = configured
             ? expandHomePath(configured)
             : environment.CLAUDE_CONFIG_DIR?.trim() || path.join(NodeOS.homedir(), ".claude");
-        } else {
-          home = expandHomePath(
-            environment.GROK_HOME?.trim() || path.join(NodeOS.homedir(), ".grok"),
-          );
         }
         const directory = path.resolve(home, provider === "claude" ? "projects" : "sessions");
         const sourceKey = provider + "\0" + directory;
@@ -329,7 +325,6 @@ export const make = Effect.gen(function* () {
           provider,
           dir,
           volumeId,
-          ...(provider === "grok" ? { fileName: "updates.jsonl" } : {}),
         });
       }
     }

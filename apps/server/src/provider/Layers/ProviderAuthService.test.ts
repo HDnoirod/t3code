@@ -31,10 +31,10 @@ import {
 } from "../Services/ProviderSessionDirectory.ts";
 import { makeProviderAuthService } from "./ProviderAuthService.ts";
 
-const instanceId = ProviderInstanceId.make("antigravity-personal");
-const otherInstanceId = ProviderInstanceId.make("antigravity-work");
+const instanceId = ProviderInstanceId.make("opencode-personal");
+const otherInstanceId = ProviderInstanceId.make("opencode-work");
 const unsupportedInstanceId = ProviderInstanceId.make("codex");
-const driverKind = ProviderDriverKind.make("antigravity");
+const driverKind = ProviderDriverKind.make("opencode");
 const owner = "paired-client-owner";
 const otherOwner = "paired-client-other";
 const flowId = "test-sign-in-flow";

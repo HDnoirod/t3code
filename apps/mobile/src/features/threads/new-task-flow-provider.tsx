@@ -38,6 +38,7 @@ import { scopedProjectKey } from "../../lib/scopedEntities";
 import { appAtomRegistry } from "../../state/atom-registry";
 import { projectEnvironment } from "../../state/projects";
 import { useEnvironmentQuery } from "../../state/query";
+import { hubChatDefaultsQuery } from "../../state/workspace-hub";
 import {
   appendComposerDraftAttachments,
   type ComposerDraftInsertion,
@@ -167,6 +168,7 @@ type NewTaskFlowContextValue = {
   readonly selectedProject: EnvironmentProject | null;
   readonly modelOptions: ReadonlyArray<ModelOption>;
   readonly selectedModel: ModelSelection | null;
+  readonly defaultAccountIssue: string | null;
   readonly selectedModelOption: ModelOption | null;
   readonly selectedProviderStatus: ServerProvider | null;
   readonly providerGroups: ReadonlyArray<ProviderGroup>;
@@ -389,6 +391,16 @@ export function NewTaskFlowProvider(props: React.PropsWithChildren) {
   const selectedEnvironmentServerConfig = useEnvironmentServerConfig(
     selectedProject?.environmentId ?? null,
   );
+  const loadClientDefault =
+    selectedEnvironmentServerConfig?.hubChatDefaults === true && !editingPendingTask;
+  const clientDefaults = useEnvironmentQuery(
+    loadClientDefault && selectedProject
+      ? hubChatDefaultsQuery({
+          environmentId: selectedProject.environmentId,
+          input: { workspaceId: selectedProject.id },
+        })
+      : null,
+  );
   // While a queued pending task is being edited its draft lives under a key
   // scoped to the queued message, so new-task drafts stay intact.
   const selectedProjectDraftKey = editingPendingTask
@@ -413,6 +425,9 @@ export function NewTaskFlowProvider(props: React.PropsWithChildren) {
     );
   }, [activeDraftKey, editingPendingTask, selectedProject]);
   const selectedProjectDraft = useComposerDraft(selectedProjectDraftKey);
+  useEffect(() => {
+    if (loadClientDefault && selectedProjectDraftKey) clientDefaults.refresh();
+  }, [loadClientDefault, selectedProjectDraftKey, clientDefaults.refresh]);
   const prompt = selectedProjectDraft.text;
   const attachments = selectedProjectDraft.attachments;
   // Default mode until the user picks one explicitly — same resolution web
@@ -470,17 +485,23 @@ export function NewTaskFlowProvider(props: React.PropsWithChildren) {
     : projectSettings.settings.defaultRuntimeMode;
   const runtimeMode = selectedProjectDraft.runtimeMode ?? defaultRuntimeMode;
 
-  // Antigravity keeps unavailable selections so sign-out or a catalog change
-  // cannot switch the user's model. Other providers retain their fallback
-  // rules. Implicit defaults also exclude legacy models for those providers.
+  // Implicit defaults exclude legacy models.
   const draftModelSelection = resolveSelectableModelSelection(
     selectedEnvironmentServerConfig,
     selectedProjectDraft.modelSelection ?? null,
   );
-  const projectDefaultModelSelection = resolveDefaultableModelSelection(
-    selectedEnvironmentServerConfig,
-    projectSettings.settings.defaultModelSelection,
-  );
+  const projectDefaultModelSelection =
+    clientDefaults.data?.modelSelection ??
+    resolveDefaultableModelSelection(
+      selectedEnvironmentServerConfig,
+      projectSettings.settings.defaultModelSelection,
+    );
+  const defaultAccountIssue =
+    loadClientDefault && selectedProject && !draftModelSelection
+      ? (clientDefaults.error ??
+        clientDefaults.data?.unavailableReason ??
+        (clientDefaults.isPending || !clientDefaults.data ? "Loading default AI account…" : null))
+      : null;
   const storedStickyModelSelection = useStickyComposerModelSelection();
   const stickyModelSelection = resolveDefaultableModelSelection(
     selectedEnvironmentServerConfig,
@@ -503,6 +524,7 @@ export function NewTaskFlowProvider(props: React.PropsWithChildren) {
   // An unsent draft keeps its explicit pick. Fresh drafts resolve the project
   // default before the last manual app-wide selection and provider default.
   const selectedModel = resolveNewTaskModelSelection({
+    defaultAccountIssue,
     draftSelection: draftModelSelection,
     projectDefaultSelection: projectDefaultModelSelection,
     stickySelection: stickyModelSelection,
@@ -962,8 +984,7 @@ export function NewTaskFlowProvider(props: React.PropsWithChildren) {
       }
       const draft = getComposerDraftSnapshot(selectedProjectDraftKey);
       const text = draft.text.trim();
-      // Use the displayed selection rules without substituting an unavailable
-      // Antigravity model while the task is queued.
+      // Use the displayed selection rules while the task is queued.
       const draftModelSelection =
         resolveSelectableModelSelection(
           selectedEnvironmentServerConfig,
@@ -1179,6 +1200,7 @@ export function NewTaskFlowProvider(props: React.PropsWithChildren) {
       modelOptions,
       selectedModel,
       selectedModelOption,
+      defaultAccountIssue,
       selectedProviderStatus,
       providerGroups,
       filteredBranches,
@@ -1241,6 +1263,7 @@ export function NewTaskFlowProvider(props: React.PropsWithChildren) {
       selectedModel,
       selectedModelKey,
       selectedModelOption,
+      defaultAccountIssue,
       selectedProjectDraftKey,
       selectedProviderStatus,
       setSelectedModelOptions,

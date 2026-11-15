@@ -1,5 +1,7 @@
-"use client";
-
+import { useHubClients } from "./workspaceHub/useHubClients";
+import { useHubProjects } from "./workspaceHub/useHubProjects";
+import { useOpenProject } from "./workspaceHub/useOpenProject";
+import { openQuickCapture } from "./workspaceHub/hub";
 import { threadPullRequestLinkMode } from "@t3tools/client-runtime/thread-pull-request-compatibility";
 import { visibleThreadPullRequests } from "@t3tools/shared/threadPullRequests";
 
@@ -37,11 +39,13 @@ import {
   type SourceControlRepositoryInfo,
   PRIMARY_LOCAL_ENVIRONMENT_ID,
   resolveEnvironmentMachineKind,
+  isStandaloneChatWorkspace,
 } from "@t3tools/contracts";
 import { useLocation, useNavigate, useParams } from "@tanstack/react-router";
 import * as Option from "effect/Option";
 import {
   ArrowLeftIcon,
+  CalendarDaysIcon,
   ChartNoAxesColumnIcon,
   CornerLeftUpIcon,
   FileSearchIcon,
@@ -73,7 +77,7 @@ import { useAtomValue } from "@effect/atom-react";
 
 import { isDesktopLocalConnectionTarget } from "../connection/desktopLocal";
 import { useDesktopLocalBootstraps } from "../connection/useDesktopLocalBootstraps";
-import { useHandleNewThread } from "../hooks/useHandleNewThread";
+import { useProjectChatHandler } from "../hooks/useProjectChatHandler";
 import { useOpenPanelPullRequestUrl } from "../hooks/useOpenPanelPullRequestUrl";
 import { writeTextToClipboard } from "../hooks/useCopyToClipboard";
 import { useClientSettings } from "../hooks/useSettings";
@@ -685,6 +689,9 @@ function OpenCommandPaletteDialog(props: {
   readonly clearOpenIntent: () => void;
 }) {
   const navigate = useNavigate();
+  const openProject = useOpenProject();
+  const projectClients = useHubClients();
+  const { projects: navigationProjects } = useHubProjects();
   const pathname = useLocation({ select: (location) => location.pathname });
   const { clearOpenIntent, openIntent, openOverlayMode, setOpen } = props;
   const [query, setQuery] = useState(openIntent?.kind === "search" ? openIntent.query : "");
@@ -715,8 +722,17 @@ function OpenCommandPaletteDialog(props: {
   const desktopLocalBootstraps = useDesktopLocalBootstraps();
   const primaryEnvironmentId = usePrimaryEnvironmentId();
   const availableSettingsSearchItems = useAvailableSettingsSearchItems();
-  const { activeDraftThread, activeThread, defaultProjectRef, handleNewThread } =
-    useHandleNewThread();
+  const {
+    activeDraftThread,
+    activeThread,
+    defaultProjectRef,
+    handleNewThread,
+    activeHubProject,
+    handleProjectChat,
+    handleFreeChat,
+    handleClientChat,
+    activeClientId,
+  } = useProjectChatHandler();
   const projects = useProjects();
   const referenceThreadRef =
     pathname === "/pull-requests"
@@ -892,7 +908,10 @@ function OpenCommandPaletteDialog(props: {
   const unsortedProjectGroups = useMemo(
     () =>
       buildSidebarProjectSnapshots({
-        projects: clientSettings.sidebarProjectSortOrder === "manual" ? orderedProjects : projects,
+        projects: (clientSettings.sidebarProjectSortOrder === "manual"
+          ? orderedProjects
+          : projects
+        ).filter((project) => !isStandaloneChatWorkspace(project.id)),
         settings: projectGroupingSettings,
         primaryEnvironmentId,
         resolveEnvironmentLabel: (environmentId) => environmentLabelById.get(environmentId) ?? null,
@@ -1258,67 +1277,48 @@ function OpenCommandPaletteDialog(props: {
 
   const projectThreadItems = useMemo(
     () =>
-      enumerateCommandPaletteItems(
-        buildProjectActionItems({
-          projects: pickerProjects,
-          valuePrefix: "new-thread-in",
-          searchTerms: (project) => {
-            const group = projectGroupByTargetKey.get(`${project.environmentId}:${project.id}`);
-            const location = projectEnvironmentLocationById.get(project.environmentId);
-            return [
-              ...(group?.memberProjects.flatMap((member) => [member.title, member.workspaceRoot]) ??
-                []),
-              ...(location ? [location.label] : []),
-            ];
+      enumerateCommandPaletteItems([
+        ...projectClients
+          .filter((client) => !client.archived)
+          .map((client): CommandPaletteActionItem => ({
+            kind: "action",
+            value: `new-client-chat:${client.environmentId}:${client.id}`,
+            title: client.name,
+            description: "General client chat",
+            searchTerms: [client.name, "client", "new chat"],
+            icon: <MessageSquareIcon className={ITEM_ICON_CLASS} />,
+            run: async () => {
+              await handleClientChat(client.environmentId, client.id);
+            },
+          })),
+        ...navigationProjects.map((project): CommandPaletteActionItem => ({
+          kind: "action",
+          value: `new-thread-in:${project.environmentId}:${project.id}`,
+          title: project.title,
+          description:
+            projectClients.find(
+              (client) =>
+                client.environmentId === project.environmentId &&
+                client.id === project.clientIds[0],
+            )?.name ?? "Personal project",
+          searchTerms: [
+            project.title,
+            "new chat",
+            ...projectClients
+              .filter(
+                (client) =>
+                  client.environmentId === project.environmentId &&
+                  project.clientIds.includes(client.id),
+              )
+              .map((client) => client.name),
+          ],
+          icon: <FolderIcon className={ITEM_ICON_CLASS} />,
+          run: async () => {
+            await handleProjectChat(project);
           },
-          renderDescription: (project) => {
-            const location = projectEnvironmentLocationById.get(project.environmentId) ?? {
-              kind: "remote",
-              label: "Remote",
-              machine: "server" as const,
-            };
-            return (
-              <span className="flex min-w-0 items-center gap-1">
-                <span className="inline-flex min-w-0 items-center gap-1">
-                  {location.kind === "remote" ? (
-                    <EnvironmentMachineIcon
-                      aria-hidden
-                      kind={location.machine}
-                      className={COMMAND_PALETTE_META_ICON_CLASS}
-                    />
-                  ) : null}
-                  <span className="truncate">{location.label}</span>
-                </span>
-                <CommandPaletteMetaDot />
-                <span className="truncate">{project.workspaceRoot}</span>
-              </span>
-            );
-          },
-          icon: projectFavicon,
-          runProject: async (project) => {
-            const group = projectGroupByTargetKey.get(`${project.environmentId}:${project.id}`);
-            const contextualRefBelongsToGroup =
-              contextualProjectRef !== null &&
-              group?.memberProjectRefs.some(
-                (projectRef) =>
-                  projectRef.environmentId === contextualProjectRef.environmentId &&
-                  projectRef.projectId === contextualProjectRef.projectId,
-              );
-            await handleNewThread(
-              contextualRefBelongsToGroup
-                ? contextualProjectRef
-                : scopeProjectRef(project.environmentId, project.id),
-            );
-          },
-        }),
-      ),
-    [
-      contextualProjectRef,
-      handleNewThread,
-      pickerProjects,
-      projectEnvironmentLocationById,
-      projectGroupByTargetKey,
-    ],
+        })),
+      ]),
+    [navigationProjects, handleProjectChat, handleClientChat, projectClients],
   );
 
   const allThreadItems = useMemo(
@@ -1735,9 +1735,37 @@ function OpenCommandPaletteDialog(props: {
   ]);
 
   const actionItems: Array<CommandPaletteActionItem | CommandPaletteSubmenuItem> = [];
+  const freeChatEnvironmentId =
+    activeThread?.environmentId ?? primaryEnvironmentId ?? environments[0]?.environmentId;
+  if (freeChatEnvironmentId)
+    actionItems.push({
+      kind: "action",
+      value: "action:new-free-chat",
+      title: "New free chat",
+      searchTerms: ["free", "chat", "unassigned", "outside project"],
+      icon: <MessageSquareIcon className={ITEM_ICON_CLASS} />,
+      run: async () => {
+        await handleFreeChat(freeChatEnvironmentId);
+      },
+    });
+  actionItems.push({
+    kind: "action",
+    value: "action:new-hub-project",
+    searchTerms: ["new project", "client", "notes", "working folder"],
+    title: "New project",
+    icon: <FolderPlusIcon className={ITEM_ICON_CLASS} />,
+    run: async () => {
+      await navigate({ to: "/hub", search: { create: true } });
+    },
+  });
 
-  if (projects.length > 0) {
+  if (navigationProjects.length > 0 || projectClients.some((client) => !client.archived)) {
     const activeProjectTitle =
+      projectClients.find(
+        (client) =>
+          client.id === activeClientId && client.environmentId === activeThread?.environmentId,
+      )?.name ??
+      activeHubProject?.title ??
       projectPickerEntries.find((entry) => entry.isPreferred)?.group.displayName ??
       (currentProjectId ? (projectTitleById.get(currentProjectId) ?? null) : null);
 
@@ -1748,7 +1776,7 @@ function OpenCommandPaletteDialog(props: {
         searchTerms: ["new thread", "chat", "create", "draft"],
         title: (
           <>
-            New thread in <span className="font-semibold">{activeProjectTitle}</span>
+            New chat in <span className="font-semibold">{activeProjectTitle}</span>
           </>
         ),
         icon: <SquarePenIcon className={ITEM_ICON_CLASS} />,
@@ -1767,11 +1795,11 @@ function OpenCommandPaletteDialog(props: {
     actionItems.push({
       kind: "submenu",
       value: "action:new-thread-in",
-      searchTerms: ["new thread", "project", "pick", "choose", "select"],
-      title: "New thread in...",
+      searchTerms: ["new thread", "client", "project", "pick", "choose", "select"],
+      title: "New chat in client or project…",
       icon: <SquarePenIcon className={ITEM_ICON_CLASS} />,
       addonIcon: <SquarePenIcon className={ADDON_ICON_CLASS} />,
-      groups: [{ value: "projects", label: "Projects", items: projectThreadItems }],
+      groups: [{ value: "projects", label: "Clients & projects", items: projectThreadItems }],
     });
   }
 
@@ -1867,7 +1895,7 @@ function OpenCommandPaletteDialog(props: {
       "url",
       "environment",
     ],
-    title: "Add project",
+    title: "Add working folder",
     icon: <FolderPlusIcon className={ITEM_ICON_CLASS} />,
     keepOpen: true,
     run: async () => {
@@ -2028,6 +2056,44 @@ function OpenCommandPaletteDialog(props: {
     },
   });
 
+  for (const [to, title, terms] of [
+    ["/notes", "Open notes", ["notes", "ideas", "capture"]],
+    ["/hub", "Open projects", ["clients", "projects", "tasks", "hub"]],
+    ["/toolbox", "Open toolbox", ["toolbox", "pdf", "images", "csv", "rename"]],
+  ] as const) {
+    actionItems.push({
+      kind: "action",
+      value: `action:${to}`,
+      searchTerms: [...terms],
+      title,
+      icon: <CalendarDaysIcon className={ITEM_ICON_CLASS} />,
+      run: async () => {
+        await navigate({ to });
+      },
+    });
+  }
+  actionItems.push({
+    kind: "action",
+    value: "action:quick-capture",
+    searchTerms: ["capture", "note", "inbox"],
+    title: "Quick capture",
+    icon: <CalendarDaysIcon className={ITEM_ICON_CLASS} />,
+    run: async () => {
+      openQuickCapture();
+    },
+  });
+
+  actionItems.push({
+    kind: "action",
+    value: "action:time-tracking",
+    searchTerms: ["calendar", "time", "hours", "clients", "timesheet"],
+    title: "Open time tracking",
+    icon: <CalendarDaysIcon className={ITEM_ICON_CLASS} />,
+    run: async () => {
+      await navigate({ to: "/calendar" });
+    },
+  });
+
   actionItems.push({
     kind: "action",
     value: "action:settings",
@@ -2065,10 +2131,14 @@ function OpenCommandPaletteDialog(props: {
         "remove",
         "t3.json",
       ],
-      title: "Project settings",
-      description: contextualProjectGroup.displayName,
+      title: activeHubProject ? "Open project" : "Working folder settings",
+      description: activeHubProject?.title ?? contextualProjectGroup.displayName,
       icon: <FolderIcon className={ITEM_ICON_CLASS} />,
       run: async () => {
+        if (activeHubProject) {
+          await openProject(activeHubProject);
+          return;
+        }
         await navigate({
           to: "/projects/$projectKey",
           params: { projectKey: contextualProjectGroup.projectKey },

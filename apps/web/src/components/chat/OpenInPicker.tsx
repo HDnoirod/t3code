@@ -30,8 +30,6 @@ import {
   MenuTrigger,
 } from "../ui/menu";
 import {
-  AntigravityIcon,
-  CursorIcon,
   FileExplorerIcon,
   FinderIcon,
   Icon,
@@ -73,11 +71,6 @@ export const resolveOpenInOptions = (
 ) => {
   const baseOptions: ReadonlyArray<Omit<OpenInOption, "label">> = [
     {
-      Icon: CursorIcon,
-      value: "cursor",
-      kind: "brand",
-    },
-    {
       Icon: TraeIcon,
       value: "trae",
       kind: "brand",
@@ -105,11 +98,6 @@ export const resolveOpenInOptions = (
     {
       Icon: Zed,
       value: "zed",
-      kind: "brand",
-    },
-    {
-      Icon: AntigravityIcon,
-      value: "antigravity",
       kind: "brand",
     },
     {

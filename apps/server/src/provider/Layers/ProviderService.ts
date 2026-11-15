@@ -1381,13 +1381,6 @@ const makeProviderService = Effect.fn("makeProviderService")(function* (
                     provider: adapter.provider,
                   }),
                 ),
-                Effect.catchCause((cause) =>
-                  Effect.logWarning("provider.session.stop-stale-failed", {
-                    threadId: input.threadId,
-                    provider: adapter.provider,
-                    cause,
-                  }),
-                ),
               );
             }),
       { discard: true },
@@ -1455,14 +1448,15 @@ const makeProviderService = Effect.fn("makeProviderService")(function* (
             );
           }
         }
+        // Compatible accounts share native history. Keep using the persisted
+        // cursor even when a failed handoff left no live session to supply it.
+        const canResumePersistedBinding = persistedBinding?.provider === resolvedProvider;
         const effectiveResumeCursor =
           input.resumeCursor ??
-          (persistedBinding?.providerInstanceId === resolvedInstanceId
-            ? persistedBinding.resumeCursor
-            : undefined);
+          (canResumePersistedBinding ? persistedBinding.resumeCursor : undefined);
         const effectiveCwd =
           input.cwd ??
-          (persistedBinding?.providerInstanceId === resolvedInstanceId
+          (canResumePersistedBinding
             ? readPersistedCwd(persistedBinding.runtimePayload)
             : undefined);
         yield* Effect.annotateCurrentSpan({
@@ -1470,16 +1464,14 @@ const makeProviderService = Effect.fn("makeProviderService")(function* (
           "provider.resume_cursor.source":
             input.resumeCursor !== undefined
               ? "request"
-              : effectiveResumeCursor !== undefined &&
-                  persistedBinding?.providerInstanceId === resolvedInstanceId
+              : effectiveResumeCursor !== undefined && canResumePersistedBinding
                 ? "persisted"
                 : "none",
           "provider.resume_cursor.present": effectiveResumeCursor !== undefined,
           "provider.cwd.source":
             input.cwd !== undefined
               ? "request"
-              : effectiveCwd !== undefined &&
-                  persistedBinding?.providerInstanceId === resolvedInstanceId
+              : effectiveCwd !== undefined && canResumePersistedBinding
                 ? "persisted"
                 : "none",
           "provider.cwd.effective": effectiveCwd ?? "",
@@ -1499,6 +1491,13 @@ const makeProviderService = Effect.fn("makeProviderService")(function* (
           }
         }
         const adapter = yield* registry.getByInstance(resolvedInstanceId);
+        // Release the previous account's writer before opening the same native
+        // conversation. A failed stop must abort the handoff, not race a second
+        // writer against it. Keep the durable binding until the new start succeeds.
+        yield* stopStaleSessionsForThread({
+          threadId,
+          currentInstanceId: resolvedInstanceId,
+        });
         yield* clearTurnAnalyticsSession(resolvedInstanceId, threadId);
         yield* prepareMcpSession(threadId, resolvedInstanceId);
         const session = yield* adapter
@@ -1522,10 +1521,6 @@ const makeProviderService = Effect.fn("makeProviderService")(function* (
           providerInstanceId: resolvedInstanceId,
         };
 
-        yield* stopStaleSessionsForThread({
-          threadId,
-          currentInstanceId: resolvedInstanceId,
-        });
         yield* upsertSessionBinding(sessionWithInstance, threadId, {
           modelSelection: input.modelSelection,
         });

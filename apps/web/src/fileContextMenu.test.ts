@@ -61,7 +61,7 @@ describe("buildFileContextMenuItems", () => {
       capabilities: {
         revealLabel: "Reveal in Finder",
         canOpenDefault: true,
-        editorIds: ["vscode", "cursor", "file-manager"],
+        editorIds: ["vscode", "zed", "file-manager"],
       },
     });
 
@@ -70,7 +70,7 @@ describe("buildFileContextMenuItems", () => {
     expect(items[1]).toMatchObject({ label: "Reveal in Finder" });
     const openWith = items[2];
     NodeAssert.ok(openWith);
-    expect(openWith.children?.map((child) => child.id)).toEqual(["editor:vscode", "editor:cursor"]);
+    expect(openWith.children?.map((child) => child.id)).toEqual(["editor:vscode", "editor:zed"]);
   });
 
   it("offers only the reveal item when just reveal is enabled", () => {

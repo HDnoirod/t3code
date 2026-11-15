@@ -296,7 +296,7 @@ function Sidebar({
             "fixed inset-y-0 z-10 hidden h-svh w-(--sidebar-width) md:flex",
             "[[data-panel-animations=true]_&]:transition-[left,right,width] [[data-panel-animations=true]_&]:[transition-duration:var(--panel-animation-duration)] [[data-panel-animations=true]_&]:ease-out",
             side === "left"
-              ? "left-0 group-data-[collapsible=offcanvas]:left-[calc(var(--sidebar-width)*-1)]"
+              ? "left-[var(--app-navigation-width,0px)] group-data-[collapsible=offcanvas]:left-[calc(var(--app-navigation-width,0px)-var(--sidebar-width))]"
               : "right-0 group-data-[collapsible=offcanvas]:right-[calc(var(--sidebar-width)*-1)]",
             // Adjust the padding for floating and inset variants.
             variant === "floating" || variant === "inset"

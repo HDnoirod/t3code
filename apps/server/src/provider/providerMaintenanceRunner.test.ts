@@ -31,10 +31,10 @@ import {
 const isServerProviderUpdateError = Schema.is(ServerProviderUpdateError);
 
 const CODEX_DRIVER = ProviderDriverKind.make("codex");
-const CURSOR_DRIVER = ProviderDriverKind.make("cursor");
+const CLAUDE_DRIVER = ProviderDriverKind.make("claudeAgent");
 const OPENCODE_DRIVER = ProviderDriverKind.make("opencode");
 const CODEX_INSTANCE_ID = ProviderInstanceId.make("codex");
-const CURSOR_INSTANCE_ID = ProviderInstanceId.make("cursor");
+const CLAUDE_INSTANCE_ID = ProviderInstanceId.make("claudeAgent");
 const OPENCODE_INSTANCE_ID = ProviderInstanceId.make("opencode");
 const encoder = new TextEncoder();
 
@@ -45,13 +45,13 @@ const encoder = new TextEncoder();
 const NonWindowsPlatform = Layer.succeed(HostProcessPlatform, "linux");
 
 function lifecycleFor(provider: ProviderDriverKind): ProviderMaintenanceCapabilities {
-  if (provider === CURSOR_DRIVER) {
+  if (provider === CLAUDE_DRIVER) {
     return makeProviderMaintenanceCapabilities({
       provider,
       packageName: null,
-      updateExecutable: "cursor-agent",
+      updateExecutable: "claude",
       updateArgs: ["update"],
-      updateLockKey: "cursor-agent",
+      updateLockKey: "claude",
     });
   }
   return makeProviderMaintenanceCapabilities({
@@ -80,10 +80,10 @@ const baseProvider: ServerProvider = {
   skills: [],
 };
 
-const baseCursorProvider: ServerProvider = {
+const baseClaudeProvider: ServerProvider = {
   ...baseProvider,
-  instanceId: CURSOR_INSTANCE_ID,
-  driver: CURSOR_DRIVER,
+  instanceId: CLAUDE_INSTANCE_ID,
+  driver: CLAUDE_DRIVER,
 };
 
 const baseOpenCodeProvider: ServerProvider = {
@@ -243,13 +243,13 @@ describe("providerMaintenanceRunner", () => {
   it.effect("runs the allowlisted provider update command and records success", () => {
     const calls: Array<{ command: string; args: ReadonlyArray<string> }> = [];
     return Effect.gen(function* () {
-      const { registry, updateStatesRef } = yield* makeRegistry(baseCursorProvider);
+      const { registry, updateStatesRef } = yield* makeRegistry(baseClaudeProvider);
       const updater = yield* makeTestRunner(registry);
 
-      const result = yield* updater.updateProvider(CURSOR_DRIVER);
+      const result = yield* updater.updateProvider(CLAUDE_DRIVER);
       assert.deepStrictEqual(calls, [
         {
-          command: "cursor-agent",
+          command: "claude",
           args: ["update"],
         },
       ]);
@@ -302,8 +302,8 @@ describe("providerMaintenanceRunner", () => {
     "keeps a successful update when the binary is present but its version is unreadable",
     () => {
       return Effect.gen(function* () {
-        const { registry, providersRef } = yield* makeRegistry(baseCursorProvider);
-        // Cursor's `agent about` probe can fail right after an update while the
+        const { registry, providersRef } = yield* makeRegistry(baseClaudeProvider);
+        // Claude's `agent about` probe can fail right after an update while the
         // new binary is perfectly fine.
         const updater = yield* makeTestRunner({
           ...registry,
@@ -313,7 +313,7 @@ describe("providerMaintenanceRunner", () => {
             ),
         });
 
-        const result = yield* updater.updateProvider(CURSOR_DRIVER);
+        const result = yield* updater.updateProvider(CLAUDE_DRIVER);
         assert.strictEqual(result.providers[0]?.updateState?.status, "succeeded");
       }).pipe(
         Effect.provide(

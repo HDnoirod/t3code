@@ -1,3 +1,5 @@
+import "../christmasDecorations.css";
+import { QuickCaptureHost } from "./workspaceHub/QuickCapture";
 import { useAtomValue } from "@effect/atom-react";
 import * as Schema from "effect/Schema";
 import {
@@ -10,7 +12,12 @@ import {
 import { useLocation, useNavigate, useParams } from "@tanstack/react-router";
 
 import { isElectron } from "../env";
-import { getLocalStorageItem, removeLocalStorageItem } from "../hooks/useLocalStorage";
+import {
+  getLocalStorageItem,
+  removeLocalStorageItem,
+  useLocalStorage,
+} from "../hooks/useLocalStorage";
+import { WorkspaceNavigation } from "./WorkspaceNavigation";
 import {
   isRichTextBoldShortcut,
   resolveShortcutCommand,
@@ -25,14 +32,13 @@ import { selectThreadTerminalUiState, useTerminalUiStateStore } from "../termina
 import { resolveThreadRouteRef } from "../threadRoutes";
 import { cn, isMacPlatform } from "../lib/utils";
 import { primaryServerKeybindingsAtom } from "../state/server";
-import { useEnvironmentIdentificationMode, useLegacySidebarEnabled } from "../hooks/useSettings";
+import { useEnvironmentIdentificationMode } from "../hooks/useSettings";
 import {
   PanelAnimationSuppressionProvider,
   usePanelAnimationSettings,
   usePanelNavigationSuppression,
 } from "../panelAnimations";
-import LegacyThreadSidebar from "./LegacySidebar";
-import ThreadSidebar from "./Sidebar";
+import { ProjectSidebar } from "./workspaceHub/ProjectSidebar";
 import { SettingsSidebarNav } from "./settings/SettingsSidebarNav";
 import { SidebarChromeHeader } from "./sidebar/SidebarChrome";
 import {
@@ -125,7 +131,7 @@ function SidebarControl() {
     // the panel), so the trigger mirrors it: both clusters sit one extra pixel
     // off their edge and the titlebar reads symmetric.
     <div
-      className="pointer-events-none fixed left-[var(--workspace-controls-left)] top-[var(--workspace-controls-top)] z-50 ml-px flex h-[var(--workspace-topbar-height)] items-center"
+      className="pointer-events-none fixed left-[calc(var(--app-navigation-width,0px)+var(--workspace-controls-left))] top-[var(--workspace-controls-top)] z-50 ml-px flex h-[var(--workspace-topbar-height)] items-center"
       data-sidebar-control=""
     >
       <Tooltip>
@@ -214,7 +220,6 @@ function ProjectProjectionRetention() {
 
 export function AppSidebarLayout({ children }: { children: ReactNode }) {
   const navigate = useNavigate();
-  const legacySidebarEnabled = useLegacySidebarEnabled();
   const { active: panelAnimationsActive, durationMs: panelAnimationDurationMs } =
     usePanelAnimationSettings();
   // Settings routes show the settings nav in place of whichever thread
@@ -223,13 +228,20 @@ export function AppSidebarLayout({ children }: { children: ReactNode }) {
   const panelAnimationsSuppressed = usePanelNavigationSuppression(pathname);
   const routePanelAnimationsActive = panelAnimationsActive && !panelAnimationsSuppressed;
   const isOnSettings = pathname === "/settings" || pathname.startsWith("/settings/");
+  const isOnWorkspaceTool = ["/calendar", "/notes", "/toolbox"].includes(pathname);
+  const [navigationExpanded, setNavigationExpanded] = useLocalStorage(
+    "t3code:workspace-navigation-expanded",
+    false,
+    Schema.Boolean,
+  );
   const isMacosDesktop = isElectron && isMacPlatform(navigator.platform);
   const [sidebarWidth, setSidebarWidth] = useState(readInitialThreadSidebarWidth);
   // Subscribed rather than read once: the clamp must track live window size,
   // and a clamped drag ends with an unchanged width, which skips the re-render
   // that would otherwise refresh a render-time snapshot.
   const viewportWidth = useSyncExternalStore(subscribeToViewportWidth, readViewportWidth);
-  const sidebarMaximumWidth = resolveThreadSidebarMaximumWidth(viewportWidth);
+  const navigationWidth = navigationExpanded && viewportWidth >= 768 ? 164 : 76;
+  const sidebarMaximumWidth = resolveThreadSidebarMaximumWidth(viewportWidth - navigationWidth);
   const resetSidebarWidth = () => {
     try {
       removeLocalStorageItem(THREAD_SIDEBAR_WIDTH_STORAGE_KEY);
@@ -245,10 +257,13 @@ export function AppSidebarLayout({ children }: { children: ReactNode }) {
       : false;
   });
   const sidebarProviderStyle = {
+    "--app-navigation-width": `${navigationWidth}px`,
     "--sidebar-width": `${sidebarWidth}px`,
     "--panel-animation-duration": `${panelAnimationDurationMs}ms`,
     ...(isMacosDesktop && !isWindowFullscreen
-      ? { "--workspace-controls-left": MACOS_TRAFFIC_LIGHTS_LEFT_INSET }
+      ? {
+          "--workspace-controls-left": `max(12px, calc(${MACOS_TRAFFIC_LIGHTS_LEFT_INSET} - ${navigationWidth}px))`,
+        }
       : {}),
   } as CSSProperties;
 
@@ -298,34 +313,39 @@ export function AppSidebarLayout({ children }: { children: ReactNode }) {
         style={sidebarProviderStyle}
       >
         <ProjectProjectionRetention />
-        <Sidebar
-          side="left"
-          collapsible="offcanvas"
-          data-app-sidebar=""
-          resizable={{
-            maxWidth: sidebarMaximumWidth,
-            minWidth: THREAD_SIDEBAR_MIN_WIDTH,
-            shouldAcceptWidth: ({ currentWidth, nextWidth, wrapper }) =>
-              nextWidth <= currentWidth ||
-              wrapper.clientWidth - nextWidth >= THREAD_MAIN_CONTENT_MIN_WIDTH,
-            storageKey: THREAD_SIDEBAR_WIDTH_STORAGE_KEY,
-            onResize: setSidebarWidth,
-          }}
-        >
-          {isOnSettings ? (
-            <>
-              <SidebarChromeHeader isElectron={isElectron} />
-              <SettingsSidebarNav pathname={pathname} />
-            </>
-          ) : legacySidebarEnabled ? (
-            <LegacyThreadSidebar />
-          ) : (
-            <ThreadSidebar />
-          )}
-          <SidebarRail onDoubleClick={resetSidebarWidth} />
-        </Sidebar>
+        <QuickCaptureHost />
+        <WorkspaceNavigation
+          expanded={navigationWidth > 76}
+          onToggle={() => setNavigationExpanded((value) => !value)}
+        />
+        {!isOnWorkspaceTool && (
+          <Sidebar
+            side="left"
+            collapsible="offcanvas"
+            data-app-sidebar=""
+            resizable={{
+              maxWidth: sidebarMaximumWidth,
+              minWidth: THREAD_SIDEBAR_MIN_WIDTH,
+              shouldAcceptWidth: ({ currentWidth, nextWidth, wrapper }) =>
+                nextWidth <= currentWidth ||
+                wrapper.clientWidth - navigationWidth - nextWidth >= THREAD_MAIN_CONTENT_MIN_WIDTH,
+              storageKey: THREAD_SIDEBAR_WIDTH_STORAGE_KEY,
+              onResize: setSidebarWidth,
+            }}
+          >
+            {isOnSettings ? (
+              <>
+                <SidebarChromeHeader isElectron={isElectron} />
+                <SettingsSidebarNav pathname={pathname} />
+              </>
+            ) : (
+              <ProjectSidebar />
+            )}
+            <SidebarRail onDoubleClick={resetSidebarWidth} />
+          </Sidebar>
+        )}
         {children}
-        <SidebarControl />
+        {!isOnWorkspaceTool && <SidebarControl />}
         <NavigationHistoryShortcuts />
       </SidebarProvider>
     </PanelAnimationSuppressionProvider>

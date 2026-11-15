@@ -268,7 +268,7 @@ import {
 } from "../hooks/useSettings";
 import { useNowMinute } from "../hooks/useNowMinute";
 import { usePanelAnimationSettings, usePanelPresence } from "../panelAnimations";
-import { useNewThreadHandler } from "../hooks/useHandleNewThread";
+import { useProjectChatHandler } from "../hooks/useProjectChatHandler";
 import { useRemoveClonedProject } from "../hooks/useRemoveClonedProject";
 import { useOpenPanelPullRequestUrl } from "../hooks/useOpenPanelPullRequestUrl";
 import { useThreadActions } from "../hooks/useThreadActions";
@@ -455,7 +455,6 @@ import {
   resolveBackgroundDraftWorkspaceOptions,
   resolveComposerInteractionMode,
   resolveComposerProviderSelection,
-  getAntigravitySendBlockReason,
   resolveDraftHeroState,
   findRecordedWorktreeSetup,
   resolveVisibleWorktreeSetup,
@@ -1475,7 +1474,7 @@ export default function ChatView(props: ChatViewProps) {
   const draftId = routeKind === "draft" ? props.draftId : null;
   const threadSyncPhase = routeKind === "server" ? (props.threadSyncPhase ?? null) : null;
   const threadDetailLoading = threadSyncPhase === "loading";
-  const handleNewThread = useNewThreadHandler();
+  const { handleNewThread } = useProjectChatHandler();
   const { settleThread, pinThread, confirmAndUnpinThread } = useThreadActions();
   const routeThreadRef = useMemo(
     () => scopeThreadRef(environmentId, threadId),
@@ -7759,11 +7758,6 @@ export default function ChatView(props: ChatViewProps) {
         setThreadError(threadIdForSend, `Provider for ${selection.model} is unavailable.`);
         return;
       }
-      const providerBlockReason = getAntigravitySendBlockReason(provider.snapshot, selection.model);
-      if (providerBlockReason) {
-        setThreadError(threadIdForSend, providerBlockReason);
-        return;
-      }
       const providerState = getComposerProviderState({
         provider: provider.driverKind,
         model: selection.model,
@@ -9891,7 +9885,10 @@ export default function ChatView(props: ChatViewProps) {
               />
             </div>
             {/* Messages Wrapper */}
-            <div className="relative flex min-h-0 flex-1 flex-col bg-background">
+            <div
+              className="relative flex min-h-0 flex-1 flex-col bg-background"
+              data-seasonal-canvas="chat"
+            >
               {/* Messages — LegendList handles virtualization and scrolling internally */}
               <MessagesTimeline
                 citationRequest={paintOnlyDisplayedTimeline ? null : citationRequest}
@@ -10049,6 +10046,12 @@ export default function ChatView(props: ChatViewProps) {
                         : undefined
                     }
                   >
+                    {routeThreadRef && (
+                      <HubChatContext
+                        key={`${routeThreadRef.environmentId}:${routeThreadRef.threadId}`}
+                        threadRef={routeThreadRef}
+                      />
+                    )}
                     <ComposerSurface.Shell contextStrip={showComposerContextStrip}>
                       <ComposerSurface.Host>
                         <div ref={attachDraftHeroComposerAnchorRef} className="relative z-10">
@@ -10487,3 +10490,4 @@ export default function ChatView(props: ChatViewProps) {
     </div>
   );
 }
+import { HubChatContext } from "./workspaceHub/HubChatContext";

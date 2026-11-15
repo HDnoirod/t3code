@@ -1,18 +1,12 @@
 import {
-  AntigravitySettings,
   ClaudeSettings,
   CodexSettings,
-  CursorSettings,
-  GrokSettings,
   OpenCodeSettings,
   ProviderDriverKind,
 } from "@t3tools/contracts";
 import type * as Schema from "effect/Schema";
 import {
-  AntigravityIcon,
   ClaudeAI,
-  CursorIcon,
-  GrokIcon,
   type Icon,
   OpenAI,
   OpenCodeIcon,
@@ -57,30 +51,10 @@ const PROVIDER_CLIENT_DEFINITIONS: readonly ProviderClientDefinition[] = [
     settingsSchema: ClaudeSettings,
   },
   {
-    value: ProviderDriverKind.make("cursor"),
-    label: "Cursor",
-    icon: CursorIcon,
-    badgeLabel: "Early Access",
-    settingsSchema: CursorSettings,
-  },
-  {
-    value: ProviderDriverKind.make("grok"),
-    label: "Grok",
-    icon: GrokIcon,
-    badgeLabel: "Early Access",
-    settingsSchema: GrokSettings,
-  },
-  {
     value: ProviderDriverKind.make("opencode"),
     label: "OpenCode",
     icon: OpenCodeIcon,
     settingsSchema: OpenCodeSettings,
-  },
-  {
-    value: ProviderDriverKind.make("antigravity"),
-    label: "Antigravity",
-    icon: AntigravityIcon,
-    settingsSchema: AntigravitySettings,
   },
 ];
 

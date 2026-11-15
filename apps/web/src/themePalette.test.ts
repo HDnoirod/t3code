@@ -1,5 +1,10 @@
 import { describe, expect, it, vi } from "vite-plus/test";
-import { BUILT_IN_THEMES } from "@t3tools/shared/themePalettes";
+import {
+  BUILT_IN_THEMES,
+  CHEERFUL_THEME,
+  CHRISTMAS_THEME,
+  FROST_THEME,
+} from "@t3tools/shared/themePalettes";
 
 import {
   applyThemeColorPreview,
@@ -80,6 +85,39 @@ function contrastRatio(first: string, second: string): number {
 }
 
 describe("theme files", () => {
+  it.each([CHEERFUL_THEME, CHRISTMAS_THEME, FROST_THEME])(
+    "keeps $label readable across light and dark work surfaces",
+    (theme) => {
+      expect(getThemeDefinition(theme.id)).toBe(theme);
+      expect(getThemeModes(theme)).toEqual(["light", "dark"]);
+      expect(themeAllowsSidebarArtwork(theme.id)).toBe(false);
+      for (const mode of ["light", "dark"] as const) {
+        const colors = getThemeColorsForMode(theme, mode)!;
+        for (const surface of [
+          colors.canvas,
+          colors.chrome,
+          colors.surface,
+          colors.surfaceRaised,
+          colors.sidebar,
+        ]) {
+          expect(contrastRatio(colors.text, surface)).toBeGreaterThanOrEqual(7);
+          expect(contrastRatio(colors.textMuted, surface)).toBeGreaterThanOrEqual(4.5);
+        }
+        for (const [text, surface] of [
+          [colors.accentForeground, colors.accent],
+          [colors.messageForeground, colors.messageSurface],
+          [colors.messageActionForeground, colors.messageAction],
+          [colors.sidebarForeground, colors.sidebarRowSelected],
+          [colors.placeholder, colors.toolbarControl],
+          [colors.codeForeground, colors.codeBackground],
+          [colors.terminalForeground, colors.terminalBackground],
+        ] as const) {
+          expect(contrastRatio(text, surface)).toBeGreaterThanOrEqual(4.5);
+        }
+      }
+    },
+  );
+
   it("keeps every built-in palette value in canonical OKLCH form", () => {
     for (const theme of BUILT_IN_THEMES) {
       for (const colors of [theme.colors, ...Object.values(theme.variants ?? {})]) {

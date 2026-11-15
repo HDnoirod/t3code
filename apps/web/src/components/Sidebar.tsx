@@ -1,3 +1,4 @@
+import { useHubProjects } from "./workspaceHub/useHubProjects";
 import { requestCustomSnooze } from "./CustomSnoozeDialog";
 import { useSupportsMultiplePullRequests } from "~/hooks/useSupportsMultiplePullRequests";
 import { resolveThreadCurrentPullRequestLink } from "@t3tools/shared/threadPullRequests";
@@ -120,7 +121,7 @@ import {
   useThreadSelectionStore,
 } from "../threadSelectionStore";
 import { useThreadActions } from "../hooks/useThreadActions";
-import { useHandleNewThread } from "../hooks/useHandleNewThread";
+import { useProjectChatHandler } from "../hooks/useProjectChatHandler";
 import { isCommandPaletteOpen, openCommandPalette } from "../commandPaletteBus";
 import { startNewThreadFromContext } from "../lib/chatThreadActions";
 import { useClientSettings } from "../hooks/useSettings";
@@ -2136,6 +2137,7 @@ export default function Sidebar() {
   const projects = useProjects();
   const projectOrder = useUiStateStore((store) => store.projectOrder);
   const threads = useThreadShells();
+  const { projects: hubProjects, owners: hubChatOwners } = useHubProjects();
   const router = useRouter();
   const { isMobile, setOpenMobile } = useSidebar();
   const keybindings = useAtomValue(primaryServerKeybindingsAtom);
@@ -2215,10 +2217,10 @@ export default function Sidebar() {
       );
     },
   });
-  const newThreadContext = useHandleNewThread();
+  const newThreadContext = useProjectChatHandler();
   const openAddProjectCommandPalette = useCallback(
-    () => openCommandPalette({ open: "add-project" }),
-    [],
+    () => void router.navigate({ to: "/hub", search: { create: true } }),
+    [router],
   );
   const { environments } = useEnvironments();
   const primaryEnvironmentId = usePrimaryEnvironmentId();
@@ -2360,7 +2362,7 @@ export default function Sidebar() {
   // while the popup search filters the same collection.
   const projectScopeItems = useMemo(
     () => [
-      { value: "all", label: "All projects" },
+      { value: "all", label: "All working folders" },
       ...projectGroups.map((project) => ({
         value: project.projectKey,
         label: project.displayName,
@@ -2532,6 +2534,7 @@ export default function Sidebar() {
     const visible = threads.filter(
       (thread) =>
         thread.archivedAt === null &&
+        !hubChatOwners.has(scopedThreadKey(scopeThreadRef(thread.environmentId, thread.id))) &&
         (scopedProjectKeys === null ||
           scopedProjectKeys.has(`${thread.environmentId}:${thread.projectId}`)),
     );
@@ -2619,7 +2622,15 @@ export default function Sidebar() {
       settledThreads: sortSettledThreadsForSidebar(settled),
       snoozeNow: preciseNow,
     };
-  }, [nowMinute, optimisticDrop, scopedProjectKeys, serverConfigs, snoozeWakeTick, threads]);
+  }, [
+    nowMinute,
+    optimisticDrop,
+    scopedProjectKeys,
+    serverConfigs,
+    snoozeWakeTick,
+    threads,
+    hubChatOwners,
+  ]);
 
   const threadSearchInputRef = useRef<HTMLInputElement>(null);
   const [threadSearchQuery, setThreadSearchQuery] = useState("");
@@ -2763,9 +2774,26 @@ export default function Sidebar() {
     return routeThread === undefined ? EMPTY_THREADS : [routeThread];
   }, [routeThreadKey, snoozedShelfExpanded, snoozedThreads]);
 
+  const hubThreads = useMemo(
+    () =>
+      threads.filter(
+        (thread) =>
+          !thread.archivedAt &&
+          hubChatOwners.has(scopedThreadKey(scopeThreadRef(thread.environmentId, thread.id))) &&
+          (!scopedProjectKeys ||
+            scopedProjectKeys.has(`${thread.environmentId}:${thread.projectId}`)),
+      ),
+    [threads, hubChatOwners, scopedProjectKeys],
+  );
   const orderedThreads = useMemo(
-    () => [...pinnedThreads, ...activeThreads, ...visibleSnoozedThreads, ...renderedSettledThreads],
-    [pinnedThreads, activeThreads, visibleSnoozedThreads, renderedSettledThreads],
+    () => [
+      ...hubThreads,
+      ...pinnedThreads,
+      ...activeThreads,
+      ...visibleSnoozedThreads,
+      ...renderedSettledThreads,
+    ],
+    [hubThreads, pinnedThreads, activeThreads, visibleSnoozedThreads, renderedSettledThreads],
   );
   const orderedThreadKeys = useMemo(
     () =>
@@ -4344,7 +4372,10 @@ export default function Sidebar() {
       // One project: nothing to pick, create immediately. Shift+click creates
       // directly in the current project even with several projects, skipping
       // the palette picker.
-      if (shouldCreateNewThreadInCurrentProject(event?.shiftKey ?? false, projectGroups.length)) {
+      if (
+        (routeThreadKey !== null && hubChatOwners.has(routeThreadKey)) ||
+        shouldCreateNewThreadInCurrentProject(event?.shiftKey ?? false, projectGroups.length)
+      ) {
         if (isMobile) setOpenMobile(false);
         void startNewThreadFromContext({
           activeDraftThread: newThreadContext.activeDraftThread,
@@ -4357,7 +4388,14 @@ export default function Sidebar() {
       if (isMobile) setOpenMobile(false);
       openCommandPalette({ open: "new-thread-in" });
     },
-    [isMobile, newThreadContext, projectGroups.length, setOpenMobile],
+    [
+      isMobile,
+      newThreadContext,
+      projectGroups.length,
+      setOpenMobile,
+      routeThreadKey,
+      hubChatOwners,
+    ],
   );
 
   // The button mirrors chat.new: in multi-project setups both route through
@@ -4415,7 +4453,7 @@ export default function Sidebar() {
                         label={
                           scopedProjectGroup
                             ? `Filter threads by project: ${scopedProjectGroup.displayName}`
-                            : "Filter threads by project"
+                            : "Filter chats by working folder"
                         }
                       />
                     }
@@ -4440,8 +4478,8 @@ export default function Sidebar() {
                     className="max-w-[min(18rem,var(--available-width))] overflow-hidden"
                   >
                     <ComboboxSearchInput
-                      aria-label="Search projects"
-                      placeholder="Search projects..."
+                      aria-label="Search working folders"
+                      placeholder="Search working folders..."
                       value={projectScopeMenuState.query}
                       onKeyDown={(event) => {
                         if (
@@ -4467,7 +4505,7 @@ export default function Sidebar() {
                         })
                       }
                     />
-                    <ComboboxEmpty>No matching projects.</ComboboxEmpty>
+                    <ComboboxEmpty>No matching working folders.</ComboboxEmpty>
                     <ComboboxList>
                       {(item: (typeof projectScopeItems)[number]) => {
                         const project = projectGroupByScopeKey.get(item.value) ?? null;
@@ -4639,6 +4677,7 @@ export default function Sidebar() {
                         thread: EnvironmentThreadShell,
                         section: SidebarSection,
                         sortable?: SortableThreadRowBag,
+                        hubTitle?: string,
                       ) => {
                         const threadKey = scopedThreadKey(
                           scopeThreadRef(thread.environmentId, thread.id),
@@ -4715,9 +4754,11 @@ export default function Sidebar() {
                               null
                             }
                             projectDisplayName={
+                              hubTitle ??
                               projectDisplayNameByKey.get(
                                 `${thread.environmentId}:${thread.projectId}`,
-                              ) ?? null
+                              ) ??
+                              null
                             }
                             providerEntryByInstanceId={
                               providerEntriesByEnvironment.get(thread.environmentId) ??
@@ -4766,6 +4807,28 @@ export default function Sidebar() {
                       };
                       const from = dragState?.activeSection ?? null;
                       const items: ReactNode[] = [
+                        <li key="project-hubs">
+                          <HubSidebar
+                            scopedProjectKeys={scopedProjectKeys}
+                            renderChat={(thread, title) =>
+                              renderThreadRowInner(
+                                thread,
+                                effectiveSnoozed(thread, { now: snoozeNow })
+                                  ? "snoozed"
+                                  : thread.settledOverride === "settled"
+                                    ? "settled"
+                                    : thread.pinnedAt
+                                      ? "pinned"
+                                      : "active",
+                                undefined,
+                                title,
+                              )
+                            }
+                          />
+                        </li>,
+                        <li key="unassigned-heading" className="hub-sidebar-heading">
+                          <strong>Unassigned chats</strong>
+                        </li>,
                         <SidebarDraftBlock
                           key="draft-sessions"
                           projectByKey={projectByKey}
@@ -4906,7 +4969,7 @@ export default function Sidebar() {
             settledThreads.length ===
             0 ? (
             <div className="flex flex-col items-center gap-2 px-2 py-6 text-center text-xs text-muted-foreground/60">
-              {projects.length === 0 ? (
+              {projects.length === 0 && hubProjects.length === 0 ? (
                 <>
                   <span>No projects yet</span>
                   <button
@@ -4921,7 +4984,7 @@ export default function Sidebar() {
               ) : scopedProjectGroup ? (
                 `No threads in ${scopedProjectGroup.displayName} yet`
               ) : (
-                "No threads yet"
+                "No unassigned chats"
               )}
             </div>
           ) : null}
@@ -4931,3 +4994,4 @@ export default function Sidebar() {
     </>
   );
 }
+import { HubSidebar } from "./workspaceHub/HubSidebar";

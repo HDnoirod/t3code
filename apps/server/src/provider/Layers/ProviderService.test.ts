@@ -103,7 +103,7 @@ const codexInstanceId = ProviderInstanceId.make("codex");
 const claudeAgentInstanceId = ProviderInstanceId.make("claudeAgent");
 const CODEX_DRIVER = ProviderDriverKind.make("codex");
 const CLAUDE_AGENT_DRIVER = ProviderDriverKind.make("claudeAgent");
-const CURSOR_DRIVER = ProviderDriverKind.make("cursor");
+const OPENCODE_DRIVER = ProviderDriverKind.make("opencode");
 
 const assistantQuoteText = 'Keep the shared parser for "résumé".\nPreserve line breaks.';
 const assistantCitation = {
@@ -281,7 +281,7 @@ function makeFakeCodexAdapter(
     sendTurn,
     ...(provider === CODEX_DRIVER
       ? { compaction: { type: "native", start: compactThread } }
-      : provider === CURSOR_DRIVER
+      : provider === OPENCODE_DRIVER
         ? { compaction: { type: "slash-command", command: "/compress" } }
         : provider === CLAUDE_AGENT_DRIVER
           ? { compaction: { type: "slash-command", command: "/compact" } }
@@ -423,13 +423,13 @@ function makeProviderServiceLayer(
 ) {
   const codex = makeFakeCodexAdapter(CODEX_DRIVER, input.supportsConversationRollback);
   const claude = makeFakeCodexAdapter(CLAUDE_AGENT_DRIVER);
-  const cursor = makeFakeCodexAdapter(CURSOR_DRIVER);
+  const opencode = makeFakeCodexAdapter(OPENCODE_DRIVER);
   const registry =
     input.registry ??
     makeAdapterRegistryMock({
       [ProviderDriverKind.make("codex")]: codex.adapter,
       [ProviderDriverKind.make("claudeAgent")]: claude.adapter,
-      [ProviderDriverKind.make("cursor")]: cursor.adapter,
+      [ProviderDriverKind.make("opencode")]: opencode.adapter,
     });
 
   const providerAdapterLayer = Layer.succeed(
@@ -470,7 +470,7 @@ function makeProviderServiceLayer(
   return {
     codex,
     claude,
-    cursor,
+    opencode,
     layer,
   };
 }
@@ -988,6 +988,190 @@ it.effect("ProviderServiceLive rejects new sessions for disabled custom instance
 
 const routing = makeProviderServiceLayer();
 
+for (const driver of [CODEX_DRIVER, CLAUDE_AGENT_DRIVER]) {
+  const firstId = ProviderInstanceId.make(`${driver}-account-a`);
+  const secondId = ProviderInstanceId.make(`${driver}-account-b`);
+  const first = makeFakeCodexAdapter(driver);
+  const second = makeFakeCodexAdapter(driver);
+  const startSecond = vi.fn<ProviderAdapterShape<ProviderAdapterError>["startSession"]>((input) =>
+    Effect.gen(function* () {
+      // Model the provider's exclusive ownership of the native conversation.
+      if (yield* first.hasSession(input.threadId)) {
+        return yield* new ProviderAdapterRequestError({
+          provider: driver,
+          method: "startSession",
+          detail: "thread already has an active writer",
+        });
+      }
+      return yield* second.startSession(input);
+    }),
+  );
+  const registry = makeStaticInstanceRegistry([
+    [firstId, first.adapter],
+    [secondId, { ...second.adapter, startSession: startSecond }],
+  ]);
+  const accountSwitch = makeProviderServiceLayer({
+    registry: {
+      ...registry,
+      getInstanceInfo: (instanceId) =>
+        registry.getInstanceInfo(instanceId).pipe(
+          Effect.map((info) => ({
+            ...info,
+            continuationIdentity: {
+              driverKind: driver,
+              continuationKey: `${driver}:shared-history`,
+            },
+          })),
+        ),
+    },
+  });
+
+  accountSwitch.layer(`ProviderService account switching (${driver})`, (it) => {
+    it.effect("releases the old writer before resuming the same conversation", () =>
+      Effect.gen(function* () {
+        const provider = yield* ProviderService.ProviderService;
+        const directory = yield* ProviderSessionDirectory.ProviderSessionDirectory;
+        const threadId = asThreadId(`account-switch-${driver}`);
+        const unrelatedId = asThreadId(`account-switch-unrelated-${driver}`);
+        const initial = yield* provider.startSession(threadId, {
+          providerInstanceId: firstId,
+          threadId,
+          cwd: fixtureCwd(`account-switch-${driver}`),
+          resumeCursor: { threadId: "existing-native-conversation" },
+          runtimeMode: "full-access",
+        });
+        yield* provider.startSession(unrelatedId, {
+          providerInstanceId: firstId,
+          threadId: unrelatedId,
+          runtimeMode: "full-access",
+        });
+        const stopping = yield* Deferred.make<void>();
+        const release = yield* Deferred.make<void>();
+        const stop = first.stopSession.getMockImplementation()!;
+        first.stopSession.mockImplementationOnce((id) =>
+          Effect.gen(function* () {
+            yield* Deferred.succeed(stopping, undefined);
+            yield* Deferred.await(release);
+            yield* stop(id);
+          }),
+        );
+        startSecond.mockClear();
+        const switching = yield* provider
+          .startSession(threadId, {
+            providerInstanceId: secondId,
+            threadId,
+            resumeCursor: initial.resumeCursor,
+            runtimeMode: "full-access",
+          })
+          .pipe(Effect.forkChild({ startImmediately: true }));
+        // On the old implementation the start fails before stop is reached.
+        yield* Effect.raceFirst(Deferred.await(stopping), Fiber.join(switching));
+        assert.equal(startSecond.mock.calls.length, 0);
+        yield* Deferred.succeed(release, undefined);
+        const resumed = yield* Fiber.join(switching);
+        assert.deepEqual(resumed.resumeCursor, initial.resumeCursor);
+        assert.equal(resumed.cwd, initial.cwd);
+        assert.equal(yield* first.hasSession(threadId), false);
+        assert.equal(yield* first.hasSession(unrelatedId), true);
+        assert.equal(yield* second.hasSession(threadId), true);
+        assert.equal(
+          Option.getOrThrow(yield* directory.getBinding(threadId)).providerInstanceId,
+          secondId,
+        );
+
+        yield* provider.sendTurn({ threadId, input: "Continue our work", attachments: [] });
+        assert.equal(second.sendTurn.mock.lastCall?.[0].threadId, threadId);
+        const returned = yield* provider.startSession(threadId, {
+          providerInstanceId: firstId,
+          threadId,
+          runtimeMode: "full-access",
+        });
+        assert.deepEqual(returned.resumeCursor, initial.resumeCursor);
+        assert.equal(yield* second.hasSession(threadId), false);
+        yield* provider.stopSession({ threadId });
+        yield* provider.stopSession({ threadId: unrelatedId });
+      }),
+    );
+
+    it.effect("retains history when retrying a failed account handoff", () =>
+      Effect.gen(function* () {
+        const provider = yield* ProviderService.ProviderService;
+        const directory = yield* ProviderSessionDirectory.ProviderSessionDirectory;
+        const threadId = asThreadId(`account-switch-retry-${driver}`);
+        const initial = yield* provider.startSession(threadId, {
+          providerInstanceId: firstId,
+          threadId,
+          cwd: fixtureCwd(`account-switch-retry-${driver}`),
+          resumeCursor: { threadId: "conversation-to-preserve" },
+          runtimeMode: "full-access",
+        });
+        const originalBinding = yield* directory.getBinding(threadId);
+        const startError = new ProviderAdapterRequestError({
+          provider: driver,
+          method: "startSession",
+          detail: "Account temporarily unavailable",
+        });
+        startSecond.mockReturnValueOnce(Effect.fail(startError));
+        const error = yield* Effect.flip(
+          provider.startSession(threadId, {
+            providerInstanceId: secondId,
+            threadId,
+            resumeCursor: initial.resumeCursor,
+            runtimeMode: "full-access",
+          }),
+        );
+        assert.strictEqual(error, startError);
+        assert.equal(yield* first.hasSession(threadId), false);
+        assert.deepEqual(yield* directory.getBinding(threadId), originalBinding);
+
+        // No live session remains to supply a cursor on the next attempt.
+        const resumed = yield* provider.startSession(threadId, {
+          providerInstanceId: secondId,
+          threadId,
+          runtimeMode: "full-access",
+        });
+        assert.deepEqual(resumed.resumeCursor, initial.resumeCursor);
+        assert.equal(resumed.cwd, initial.cwd);
+        yield* provider.stopSession({ threadId });
+      }),
+    );
+
+    it.effect("keeps the old account when its writer cannot be stopped", () =>
+      Effect.gen(function* () {
+        const provider = yield* ProviderService.ProviderService;
+        const directory = yield* ProviderSessionDirectory.ProviderSessionDirectory;
+        const threadId = asThreadId(`account-switch-stop-failure-${driver}`);
+        const initial = yield* provider.startSession(threadId, {
+          providerInstanceId: firstId,
+          threadId,
+          runtimeMode: "full-access",
+        });
+        const originalBinding = yield* directory.getBinding(threadId);
+        const stopError = new ProviderAdapterRequestError({
+          provider: driver,
+          method: "stopSession",
+          detail: "Writer did not stop",
+        });
+        first.stopSession.mockReturnValueOnce(Effect.fail(stopError));
+        startSecond.mockClear();
+        const error = yield* Effect.flip(
+          provider.startSession(threadId, {
+            providerInstanceId: secondId,
+            threadId,
+            resumeCursor: initial.resumeCursor,
+            runtimeMode: "full-access",
+          }),
+        );
+        assert.strictEqual(error, stopError);
+        assert.equal(startSecond.mock.calls.length, 0);
+        assert.equal(yield* first.hasSession(threadId), true);
+        assert.deepEqual(yield* directory.getBinding(threadId), originalBinding);
+        yield* provider.stopSession({ threadId });
+      }),
+    );
+  });
+}
+
 const customCompactionDriver = ProviderDriverKind.make("custom-compaction-provider");
 const nativeCompactionInstanceId = ProviderInstanceId.make("native-compaction");
 const slashCompactionInstanceId = ProviderInstanceId.make("slash-compaction");
@@ -1107,33 +1291,33 @@ declaredCompaction.layer("ProviderService declared compaction", (it) => {
   );
 });
 
-const antigravityDriver = ProviderDriverKind.make("antigravity");
-const replacementAntigravity = makeFakeCodexAdapter(antigravityDriver);
-const originalAntigravityInstanceId = ProviderInstanceId.make("antigravity-personal");
-const replacementAntigravityInstanceId = ProviderInstanceId.make("antigravity");
-const antigravityRegistry = makeAdapterRegistryMock({
-  [antigravityDriver]: replacementAntigravity.adapter,
+const openCodeDriverForInstanceRouting = ProviderDriverKind.make("opencode");
+const replacementOpenCode = makeFakeCodexAdapter(openCodeDriverForInstanceRouting);
+const originalOpenCodeInstanceId = ProviderInstanceId.make("opencode-personal");
+const replacementOpenCodeInstanceId = ProviderInstanceId.make("opencode");
+const openCodeRegistry = makeAdapterRegistryMock({
+  [openCodeDriverForInstanceRouting]: replacementOpenCode.adapter,
 });
-let originalAntigravityInstanceAvailable = true;
-const antigravityInstanceRouting = makeProviderServiceLayer({
+let originalOpenCodeInstanceAvailable = true;
+const openCodeInstanceRouting = makeProviderServiceLayer({
   registry: {
-    ...antigravityRegistry,
+    ...openCodeRegistry,
     getInstanceInfo: (instanceId) =>
-      instanceId === originalAntigravityInstanceId && originalAntigravityInstanceAvailable
+      instanceId === originalOpenCodeInstanceId && originalOpenCodeInstanceAvailable
         ? Effect.succeed({
             instanceId,
-            driverKind: antigravityDriver,
+            driverKind: openCodeDriverForInstanceRouting,
             displayName: undefined,
             enabled: true,
             continuationIdentity: {
-              driverKind: antigravityDriver,
-              continuationKey: `${antigravityDriver}:instance:${instanceId}`,
+              driverKind: openCodeDriverForInstanceRouting,
+              continuationKey: `${openCodeDriverForInstanceRouting}:instance:${instanceId}`,
             },
           })
-        : antigravityRegistry.getInstanceInfo(instanceId),
+        : openCodeRegistry.getInstanceInfo(instanceId),
   },
 });
-antigravityInstanceRouting.layer("ProviderServiceLive instance-owned conversations", (it) => {
+openCodeInstanceRouting.layer("ProviderServiceLive instance-owned conversations", (it) => {
   it.effect(
     "does not replace a native conversation with another instance or a removed-instance fallback",
     () =>
@@ -1142,26 +1326,26 @@ antigravityInstanceRouting.layer("ProviderServiceLive instance-owned conversatio
         const directory = yield* ProviderSessionDirectory.ProviderSessionDirectory;
 
         for (const originalAvailable of [true, false]) {
-          originalAntigravityInstanceAvailable = originalAvailable;
+          originalOpenCodeInstanceAvailable = originalAvailable;
           for (const passCursor of [true, false]) {
             const threadId = asThreadId(
-              `thread-antigravity-instance-${originalAvailable}-${passCursor}`,
+              `thread-opencode-instance-${originalAvailable}-${passCursor}`,
             );
             const resumeCursor = { sessionId: "native-session" };
             yield* directory.upsert({
               threadId,
-              provider: antigravityDriver,
-              providerInstanceId: originalAntigravityInstanceId,
+              provider: openCodeDriverForInstanceRouting,
+              providerInstanceId: originalOpenCodeInstanceId,
               status: "stopped",
               runtimeMode: "approval-required",
               ...(passCursor ? {} : { resumeCursor }),
             });
             const originalBinding = yield* directory.getBinding(threadId);
-            replacementAntigravity.startSession.mockClear();
+            replacementOpenCode.startSession.mockClear();
 
             const error = yield* Effect.flip(
               provider.startSession(threadId, {
-                providerInstanceId: replacementAntigravityInstanceId,
+                providerInstanceId: replacementOpenCodeInstanceId,
                 threadId,
                 runtimeMode: "approval-required",
                 ...(passCursor ? { resumeCursor } : {}),
@@ -1172,7 +1356,7 @@ antigravityInstanceRouting.layer("ProviderServiceLive instance-owned conversatio
               error._tag,
               originalAvailable ? "ProviderValidationError" : "ProviderUnsupportedError",
             );
-            assert.equal(replacementAntigravity.startSession.mock.calls.length, 0);
+            assert.equal(replacementOpenCode.startSession.mock.calls.length, 0);
             assert.deepEqual(yield* directory.getBinding(threadId), originalBinding);
           }
         }
@@ -1546,7 +1730,7 @@ it.effect(
 );
 
 routing.layer("ProviderServiceLive routing", (it) => {
-  it.effect.each([CODEX_DRIVER, CLAUDE_AGENT_DRIVER, CURSOR_DRIVER])(
+  it.effect.each([CODEX_DRIVER, CLAUDE_AGENT_DRIVER, OPENCODE_DRIVER])(
     "rejects missing, file, and saved workspace paths before starting %s",
     (driver) =>
       Effect.gen(function* () {
@@ -1556,7 +1740,7 @@ routing.layer("ProviderServiceLive routing", (it) => {
             ? routing.codex
             : driver === CLAUDE_AGENT_DRIVER
               ? routing.claude
-              : routing.cursor;
+              : routing.opencode;
         const cwd = fixtureCwd(`missing-workspace-${driver}`);
         const movedCwd = `${cwd}-moved`;
         const threadId = asThreadId(`missing-workspace-${driver}`);
@@ -1838,8 +2022,8 @@ routing.layer("ProviderServiceLive routing", (it) => {
       const provider = yield* ProviderService.ProviderService;
       const threadId = asThreadId("thread-compact-cursor");
       yield* provider.startSession(threadId, {
-        provider: CURSOR_DRIVER,
-        providerInstanceId: ProviderInstanceId.make("cursor"),
+        provider: OPENCODE_DRIVER,
+        providerInstanceId: ProviderInstanceId.make("opencode"),
         threadId,
         runtimeMode: "full-access",
       });
@@ -1853,10 +2037,10 @@ routing.layer("ProviderServiceLive routing", (it) => {
         .compactThread(threadId, undefined, requestId)
         .pipe(Effect.forkChild);
       yield* advanceTestClock(50);
-      routing.cursor.emit({
+      routing.opencode.emit({
         type: "turn.completed",
         eventId: asEventId("evt-cursor-stale-turn-completed"),
-        provider: CURSOR_DRIVER,
+        provider: OPENCODE_DRIVER,
         createdAt: "2026-01-01T00:00:00.500Z",
         threadId,
         turnId: asTurnId("turn-before-compaction"),
@@ -1864,10 +2048,10 @@ routing.layer("ProviderServiceLive routing", (it) => {
       });
       yield* Effect.yieldNow;
       assert.equal(compactFiber.pollUnsafe(), undefined);
-      routing.cursor.emit({
+      routing.opencode.emit({
         type: "turn.completed",
         eventId: asEventId("evt-cursor-compact-completed"),
-        provider: CURSOR_DRIVER,
+        provider: OPENCODE_DRIVER,
         createdAt: "2026-01-01T00:00:01.000Z",
         threadId,
         turnId: asTurnId(`turn-${threadId}`),
@@ -1897,19 +2081,19 @@ routing.layer("ProviderServiceLive routing", (it) => {
         .compactThread(threadId, undefined, observedRequestId)
         .pipe(Effect.forkChild);
       yield* advanceTestClock(50);
-      routing.cursor.emit({
+      routing.opencode.emit({
         type: "thread.state.changed",
         eventId: asEventId("evt-cursor-provider-compacted"),
-        provider: CURSOR_DRIVER,
+        provider: OPENCODE_DRIVER,
         createdAt: "2026-01-01T00:00:02.000Z",
         threadId,
         turnId: asTurnId(`turn-${threadId}`),
         payload: { state: "compacted" },
       });
-      routing.cursor.emit({
+      routing.opencode.emit({
         type: "turn.completed",
         eventId: asEventId("evt-cursor-observed-compact-completed"),
-        provider: CURSOR_DRIVER,
+        provider: OPENCODE_DRIVER,
         createdAt: "2026-01-01T00:00:03.000Z",
         threadId,
         turnId: asTurnId(`turn-${threadId}`),
@@ -1928,12 +2112,12 @@ routing.layer("ProviderServiceLive routing", (it) => {
         Stream.runHead,
         Effect.forkChild,
       );
-      routing.cursor.sendTurn.mockImplementationOnce((input) =>
+      routing.opencode.sendTurn.mockImplementationOnce((input) =>
         Effect.gen(function* () {
-          routing.cursor.emit({
+          routing.opencode.emit({
             type: "turn.completed",
             eventId: failedStartEventId,
-            provider: CURSOR_DRIVER,
+            provider: OPENCODE_DRIVER,
             createdAt: "2026-01-01T00:00:04.000Z",
             threadId: input.threadId,
             turnId: asTurnId("turn-cursor-failed-compact-start"),
@@ -1941,7 +2125,7 @@ routing.layer("ProviderServiceLive routing", (it) => {
           });
           yield* Effect.yieldNow;
           return yield* new ProviderAdapterRequestError({
-            provider: String(CURSOR_DRIVER),
+            provider: String(OPENCODE_DRIVER),
             method: "turn/start",
             detail: "Failed after emitting a terminal event.",
           });
@@ -1975,10 +2159,10 @@ routing.layer("ProviderServiceLive routing", (it) => {
       assert.equal(concurrent._tag, "Failure");
       assert.equal(routing.codex.compactThread.mock.calls.length, 1);
 
-      routing.cursor.emit({
+      routing.opencode.emit({
         type: "thread.state.changed",
         eventId: asEventId("evt-stale-provider-compact"),
-        provider: CURSOR_DRIVER,
+        provider: OPENCODE_DRIVER,
         createdAt: "2026-01-01T00:00:00.100Z",
         threadId,
         payload: { state: "compacted" },
@@ -2035,8 +2219,8 @@ routing.layer("ProviderServiceLive routing", (it) => {
       const provider = yield* ProviderService.ProviderService;
       const threadId = asThreadId("thread-compact-fallback-timeout");
       yield* provider.startSession(threadId, {
-        provider: CURSOR_DRIVER,
-        providerInstanceId: ProviderInstanceId.make("cursor"),
+        provider: OPENCODE_DRIVER,
+        providerInstanceId: ProviderInstanceId.make("opencode"),
         threadId,
         runtimeMode: "full-access",
       });
@@ -2048,7 +2232,7 @@ routing.layer("ProviderServiceLive routing", (it) => {
       const result = yield* Fiber.join(resultFiber);
       assert.equal(result._tag, "Failure");
 
-      routing.cursor.sendTurn.mockImplementationOnce((input) =>
+      routing.opencode.sendTurn.mockImplementationOnce((input) =>
         Effect.succeed({
           threadId: input.threadId,
           turnId: asTurnId("turn-compact-fallback-retry"),
@@ -2056,10 +2240,10 @@ routing.layer("ProviderServiceLive routing", (it) => {
       );
       const retryFiber = yield* provider.compactThread(threadId).pipe(Effect.forkChild);
       yield* advanceTestClock(50);
-      routing.cursor.emit({
+      routing.opencode.emit({
         type: "turn.completed",
         eventId: asEventId("evt-compact-fallback-retry-completed"),
-        provider: CURSOR_DRIVER,
+        provider: OPENCODE_DRIVER,
         createdAt: "2026-01-01T00:10:02.000Z",
         threadId,
         turnId: asTurnId("turn-compact-fallback-retry"),
@@ -3545,7 +3729,7 @@ citations.layer("ProviderServiceLive assistant citations", (it) => {
   for (const [driver, adapter] of [
     [CODEX_DRIVER, citations.codex],
     [CLAUDE_AGENT_DRIVER, citations.claude],
-    [CURSOR_DRIVER, citations.cursor],
+    [OPENCODE_DRIVER, citations.opencode],
   ] as const) {
     it.effect(`expands quotes and bound comments as JSON data for ${driver}`, () =>
       Effect.gen(function* () {

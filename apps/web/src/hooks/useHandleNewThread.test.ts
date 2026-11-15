@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from "vite-plus/test";
-import type { RuntimeMode } from "@t3tools/contracts";
+import type { RuntimeMode, ModelSelection } from "@t3tools/contracts";
 
 const testState = vi.hoisted(() => {
   let completeProjectFileRead: (value: null) => void = () => undefined;
@@ -37,6 +37,7 @@ const testState = vi.hoisted(() => {
   };
 
   return {
+    hubDefaults: false,
     completeProjectFileRead: (value: null) => completeProjectFileRead(value),
     draftStore,
     get projectFileRead() {
@@ -52,6 +53,7 @@ const testState = vi.hoisted(() => {
         startFromOrigin: false,
       },
     ) {
+      this.hubDefaults = false;
       storedDraft = nextStoredDraft;
       targetSettings = {
         defaultThreadEnvMode: workspaceDefaults.envMode,
@@ -85,7 +87,10 @@ vi.mock("@effect/atom-react", () => ({
               },
             },
           ],
-          ["environment-ssh", { settings: testState.targetSettings }],
+          [
+            "environment-ssh",
+            { settings: testState.targetSettings, hubChatDefaults: testState.hubDefaults },
+          ],
         ]),
 }));
 vi.mock("@t3tools/client-runtime/environment", () => ({
@@ -141,11 +146,17 @@ vi.mock("../composerDraftStore", () => {
 vi.mock("../lib/chatThreadActions", async (importOriginal) => ({
   ...(await importOriginal<typeof import("../lib/chatThreadActions")>()),
   hasExplicitComposerModelSelection: () => false,
-  resolveNewThreadModelSelectionOverride: () => null,
+  resolveNewThreadModelSelectionOverride: ({
+    projectDefaultSelection,
+  }: {
+    projectDefaultSelection: ModelSelection | null;
+  }) => projectDefaultSelection,
 }));
 vi.mock("../lib/t3ProjectFileDefaults", () => ({
   readT3ProjectFile: () => testState.projectFileRead,
 }));
+vi.mock("../lib/hubChatDefaults", () => ({ readHubChatDefault: vi.fn(async () => null) }));
+vi.mock("../components/ui/toast", () => ({ toastManager: { add: vi.fn() } }));
 vi.mock("../lib/utils", () => ({
   newDraftId: () => "draft-delayed",
   newThreadId: () => "thread-delayed",
@@ -181,6 +192,44 @@ vi.mock("../uiStateStore", () => ({
 vi.mock("./useSettings", () => ({ useClientSettings: () => ({}) }));
 
 import { useNewThreadHandler } from "./useHandleNewThread";
+import { readHubChatDefault } from "../lib/hubChatDefaults";
+import { toastManager } from "../components/ui/toast";
+
+describe("client account defaults", () => {
+  it("seeds a new draft with the target client's exact account, including prepared worktrees", async () => {
+    testState.reset(null);
+    testState.hubDefaults = true;
+    const selection = { instanceId: "codex_work", model: "client-model" } as ModelSelection;
+    vi.mocked(readHubChatDefault).mockResolvedValueOnce(selection);
+    const projectRef = { environmentId: "environment-ssh", projectId: "project-remote" } as never;
+    const opened = await useNewThreadHandler()(projectRef, {
+      envMode: "worktree",
+      worktreePath: "/work/client",
+    });
+    expect(readHubChatDefault).toHaveBeenLastCalledWith(projectRef);
+    expect(testState.draftStore.setModelSelection).toHaveBeenCalledWith(
+      opened!.draftId,
+      selection,
+      { replaceOptions: true },
+    );
+  });
+  it("leaves the draft unopened when its default account cannot be resolved", async () => {
+    testState.reset(null);
+    testState.hubDefaults = true;
+    vi.mocked(readHubChatDefault).mockRejectedValueOnce(new Error("Client account unavailable"));
+    expect(
+      await useNewThreadHandler()({
+        environmentId: "environment-ssh",
+        projectId: "project-remote",
+      } as never),
+    ).toBeNull();
+    expect(testState.router.navigate).not.toHaveBeenCalled();
+    expect(testState.draftStore.setLogicalProjectDraftThreadId).not.toHaveBeenCalled();
+    expect(toastManager.add).toHaveBeenLastCalledWith(
+      expect.objectContaining({ description: "Client account unavailable" }),
+    );
+  });
+});
 
 describe.each([
   ["new", null],

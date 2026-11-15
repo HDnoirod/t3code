@@ -66,8 +66,9 @@ export function useThreadActionMenu(input: {
   /** Fallback for "Copy path" when the thread has no worktree. */
   readonly projectCwd: string | null;
   readonly onStartRename: () => void;
+  readonly onOpenProject?: (() => void) | undefined;
 }) {
-  const { threadRef, projectCwd, onStartRename } = input;
+  const { threadRef, projectCwd, onStartRename, onOpenProject } = input;
   const router = useRouter();
   const projects = useProjects();
   const primaryEnvironmentId = usePrimaryEnvironmentId();
@@ -178,6 +179,10 @@ export function useThreadActionMenu(input: {
         };
         switch (action) {
           case "project-settings": {
+            if (onOpenProject) {
+              onOpenProject();
+              return;
+            }
             const project = projects.find(
               (candidate) =>
                 candidate.environmentId === thread.environmentId &&
@@ -335,6 +340,7 @@ export function useThreadActionMenu(input: {
       router,
       settleThread,
       snoozeThread,
+      onOpenProject,
       threadRef,
       timestampFormat,
       unsettleThread,
