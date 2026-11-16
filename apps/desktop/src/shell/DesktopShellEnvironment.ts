@@ -444,9 +444,26 @@ const installPosixEnvironment = Effect.fn("desktop.shellEnvironment.installPosix
       config.platform === "darwin" && !shellEnvironment.PATH
         ? yield* readLaunchctlPath(config.env)
         : Option.none<string>();
+    // GUI launchers can omit CLI install directories when shell startup fails or times out.
+    const fallbackDirectories = shellEnvironment.PATH
+      ? []
+      : yield* Effect.filter(
+          [
+            ...trimNonEmpty(config.env.HOME).pipe(
+              Option.match({
+                onNone: () => [],
+                onSome: (home) => [`${home}/.local/bin`, `${home}/.bun/bin`],
+              }),
+            ),
+            ...(config.platform === "darwin" ? ["/opt/homebrew/bin"] : []),
+            "/usr/local/bin",
+          ],
+          (directory) => fileSystem.exists(directory).pipe(Effect.orElseSucceed(() => false)),
+        );
     const mergedPath = mergePaths(config.platform, [
       trimNonEmpty(shellEnvironment.PATH).pipe(Option.orElse(() => launchctlPath)),
       readEnvPath(config.env),
+      trimNonEmpty(fallbackDirectories.join(":")),
     ]);
 
     if (Option.isSome(mergedPath)) {

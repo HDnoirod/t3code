@@ -620,21 +620,31 @@ describe("DesktopShellEnvironment", () => {
       });
 
       assert.deepEqual(commands, ["/opt/homebrew/bin/nu", "/bin/zsh", "/bin/launchctl"]);
-      assert.equal(env.PATH, "/opt/homebrew/bin:/usr/bin");
+      assert.isTrue(env.PATH?.startsWith("/opt/homebrew/bin:/usr/bin"));
+      assert.equal(env.PATH?.split(":").filter((entry) => entry === "/opt/homebrew/bin").length, 1);
       assert.isFalse(prepared);
     }),
   );
 
-  it.effect("leaves macOS preparation incomplete when no login shell returns a PATH", () =>
+  it.effect("keeps installed macOS CLIs discoverable when no login shell returns a PATH", () =>
     Effect.gen(function* () {
+      const fs = yield* FileSystem.FileSystem;
+      const home = yield* fs.makeTempDirectoryScoped();
+      const localBin = `${home}/.local/bin`;
+      yield* fs.makeDirectory(localBin, { recursive: true });
+      const inheritedPath = "/preferred/bin:/usr/bin:/bin:/usr/sbin:/sbin";
+      const env: NodeJS.ProcessEnv = { HOME: home, SHELL: "/bin/zsh", PATH: inheritedPath };
       const prepared = yield* runShellEnvironment({
-        env: { SHELL: "/bin/zsh", PATH: "/usr/bin:/bin:/usr/sbin:/sbin" },
+        env,
         platform: "darwin",
         handler: () => "",
       });
 
       assert.isFalse(prepared);
-    }),
+      assert.isTrue(env.PATH?.startsWith(inheritedPath + ":"));
+      assert.include(env.PATH?.split(":"), localBin);
+      assert.notInclude(env.PATH?.split(":"), `${home}/.bun/bin`);
+    }).pipe(Effect.provide(NodeServices.layer)),
   );
 
   it.effect("loads PowerShell profile environment on Windows", () =>
